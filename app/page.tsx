@@ -235,7 +235,12 @@ export default function Home() {
   };
 
   const handleQuizComplete = (userAnswers: Record<string, number>, time: number) => {
-    if (!activeSectionId || !currentConfig) return;
+    console.log("[v0] handleQuizComplete called", { activeSectionId, currentConfig, userAnswers, time });
+    
+    if (!activeSectionId || !currentConfig) {
+      console.log("[v0] Early return - missing activeSectionId or currentConfig", { activeSectionId, currentConfig });
+      return;
+    }
     
     setAnswers(userAnswers);
     setTimeTaken(time);
@@ -258,11 +263,13 @@ export default function Home() {
       timeTaken: time,
     };
     
+    console.log("[v0] Saving test result:", result);
     saveTestResultToSection(activeSectionId, result);
     
     // Refresh sections to get updated data
     setSections(getAllSections());
     
+    console.log("[v0] Setting view to results");
     setView('results');
     toast.success('Test completed and saved!');
   };
