@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { Sparkles, FileText, Languages, Settings2, Shield } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Sparkles, FileText, Languages, Settings2, FolderOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -9,19 +9,28 @@ import { Textarea } from '@/components/ui/textarea';
 import { Slider } from '@/components/ui/slider';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { TestConfig, Difficulty, Language, UploadedFile } from '@/lib/types';
+import { TestConfig, Difficulty, Language, UploadedFile, SavedDocument } from '@/lib/types';
 import { FileUpload } from './file-upload';
+import { SavedDocuments } from './saved-documents';
 import { combineContent } from '@/lib/file-handler';
 
 interface TestConfigFormProps {
   onStartTest: (config: TestConfig) => void;
   isLoading: boolean;
   hasApiKey: boolean;
+  savedDocuments?: SavedDocument[];
+  selectedDocIds?: string[];
+  onSaveDocument?: (doc: { name: string; content: string; size: number }) => void;
+  onRemoveDocument?: (docId: string) => void;
+  onSelectDocuments?: (docs: SavedDocument[]) => void;
+  pastedNotes?: string;
+  onNotesChange?: (notes: string) => void;
+  sectionName?: string;
 }
 
 const languageOptions: { value: Language; label: string; description: string }[] = [
   { value: 'english', label: 'English', description: 'Questions in English' },
-  { value: 'hindi', label: 'Hindi', description: 'Questions in Hindi (हिंदी)' },
+  { value: 'hindi', label: 'Hindi', description: 'Questions in Hindi' },
   { value: 'hinglish', label: 'Hinglish', description: 'Mixed Hindi-English' },
 ];
 
@@ -31,21 +40,56 @@ const difficultyDescriptions: Record<Difficulty, { label: string; description: s
   hard: { label: 'Hard', description: 'Analysis and critical thinking' },
 };
 
-export function TestConfigForm({ onStartTest, isLoading, hasApiKey }: TestConfigFormProps) {
-  const [studyNotes, setStudyNotes] = useState('');
+export function TestConfigForm({
+  onStartTest,
+  isLoading,
+  hasApiKey,
+  savedDocuments = [],
+  selectedDocIds = [],
+  onSaveDocument,
+  onRemoveDocument,
+  onSelectDocuments,
+  pastedNotes = '',
+  onNotesChange,
+  sectionName = 'Section',
+}: TestConfigFormProps) {
+  const [studyNotes, setStudyNotes] = useState(pastedNotes);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [difficulty, setDifficulty] = useState<Difficulty>('medium');
   const [questionCount, setQuestionCount] = useState(20);
   const [language, setLanguage] = useState<Language>('english');
   const [customPrompt, setCustomPrompt] = useState('');
-  const [inputMethod, setInputMethod] = useState<'paste' | 'upload'>('paste');
+  const [inputMethod, setInputMethod] = useState<'paste' | 'upload' | 'saved'>('paste');
+
+  // Sync notes with parent
+  useEffect(() => {
+    setStudyNotes(pastedNotes);
+  }, [pastedNotes]);
+
+  const handleNotesChange = (value: string) => {
+    setStudyNotes(value);
+    onNotesChange?.(value);
+  };
 
   const handleRemoveFile = (fileName: string) => {
     setUploadedFiles(prev => prev.filter(f => f.name !== fileName));
   };
 
   const getCombinedContent = (): string => {
-    return combineContent(studyNotes, uploadedFiles);
+    // Get content from selected saved documents
+    const savedDocsContent = savedDocuments
+      .filter(doc => selectedDocIds.includes(doc.id))
+      .map(doc => doc.content)
+      .join('\n\n--- Document Separator ---\n\n');
+    
+    // Combine with pasted notes and uploaded files
+    const pastedAndUploaded = combineContent(studyNotes, uploadedFiles);
+    
+    if (savedDocsContent && pastedAndUploaded) {
+      return `${savedDocsContent}\n\n--- Additional Content ---\n\n${pastedAndUploaded}`;
+    }
+    
+    return savedDocsContent || pastedAndUploaded;
   };
 
   const totalContent = getCombinedContent();
@@ -61,6 +105,11 @@ export function TestConfigForm({ onStartTest, isLoading, hasApiKey }: TestConfig
     });
   };
 
+  // Calculate content sources for summary
+  const selectedDocsCount = selectedDocIds.length;
+  const hasNotes = studyNotes.trim().length > 0;
+  const hasUploads = uploadedFiles.length > 0;
+
   return (
     <div className="space-y-6">
       {/* Input Method Selection */}
@@ -68,35 +117,56 @@ export function TestConfigForm({ onStartTest, isLoading, hasApiKey }: TestConfig
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-foreground">
             <FileText className="w-5 h-5 text-primary" />
-            Study Material Input
+            Study Material for {sectionName}
           </CardTitle>
           <CardDescription>
-            Paste your notes directly or upload DOCX files
+            Use saved documents, paste notes, or upload new DOCX files
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Tabs value={inputMethod} onValueChange={(v) => setInputMethod(v as 'paste' | 'upload')}>
-            <TabsList className="grid w-full grid-cols-2 bg-secondary">
+          <Tabs value={inputMethod} onValueChange={(v) => setInputMethod(v as 'paste' | 'upload' | 'saved')}>
+            <TabsList className="grid w-full grid-cols-3 bg-secondary">
+              <TabsTrigger value="saved" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                <FolderOpen className="w-4 h-4 mr-2" />
+                Saved ({savedDocuments.length})
+              </TabsTrigger>
               <TabsTrigger value="paste" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
                 <FileText className="w-4 h-4 mr-2" />
                 Paste Notes
               </TabsTrigger>
               <TabsTrigger value="upload" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-                <Shield className="w-4 h-4 mr-2" />
+                <FileText className="w-4 h-4 mr-2" />
                 Upload DOCX
               </TabsTrigger>
             </TabsList>
             
+            <TabsContent value="saved" className="mt-4">
+              {onSaveDocument && onRemoveDocument && onSelectDocuments ? (
+                <SavedDocuments
+                  savedDocuments={savedDocuments}
+                  onSaveDocument={onSaveDocument}
+                  onRemoveDocument={onRemoveDocument}
+                  onSelectDocuments={onSelectDocuments}
+                  selectedDocIds={selectedDocIds}
+                />
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  <FolderOpen className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">No saved documents available</p>
+                </div>
+              )}
+            </TabsContent>
+            
             <TabsContent value="paste" className="mt-4">
               <div className="space-y-2">
                 <Textarea
-                  placeholder="Paste your study notes here... The AI will extract relevant content and generate unique questions based on this material."
+                  placeholder="Paste your study notes here... These notes are automatically saved to this section."
                   value={studyNotes}
-                  onChange={(e) => setStudyNotes(e.target.value)}
+                  onChange={(e) => handleNotesChange(e.target.value)}
                   className="min-h-[250px] bg-input border-border text-foreground placeholder:text-muted-foreground font-mono text-sm"
                 />
                 <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>{studyNotes.length.toLocaleString()} characters</span>
+                  <span>{studyNotes.length.toLocaleString()} characters (auto-saved)</span>
                   <span>More content = better questions</span>
                 </div>
               </div>
@@ -108,16 +178,57 @@ export function TestConfigForm({ onStartTest, isLoading, hasApiKey }: TestConfig
                 uploadedFiles={uploadedFiles}
                 onRemoveFile={handleRemoveFile}
               />
+              {uploadedFiles.length > 0 && onSaveDocument && (
+                <div className="mt-4 p-3 bg-primary/10 border border-primary/20 rounded-lg">
+                  <p className="text-sm text-foreground mb-2">
+                    Save uploaded files to this section for future use:
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      uploadedFiles.forEach(file => {
+                        onSaveDocument({
+                          name: file.name,
+                          content: file.content,
+                          size: file.size,
+                        });
+                      });
+                      setUploadedFiles([]);
+                    }}
+                    className="w-full"
+                  >
+                    Save {uploadedFiles.length} File{uploadedFiles.length !== 1 ? 's' : ''} to Section
+                  </Button>
+                </div>
+              )}
             </TabsContent>
           </Tabs>
 
           {/* Combined Content Summary */}
           {hasContent && (
-            <div className="flex items-center gap-2 p-3 bg-primary/10 rounded-lg border border-primary/20">
-              <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-              <span className="text-sm text-foreground">
-                <span className="font-medium">{totalContent.length.toLocaleString()}</span> characters of study material ready
-              </span>
+            <div className="flex flex-col gap-2 p-3 bg-primary/10 rounded-lg border border-primary/20">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+                <span className="text-sm font-medium text-foreground">
+                  {totalContent.length.toLocaleString()} characters ready
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                {selectedDocsCount > 0 && (
+                  <span className="bg-secondary px-2 py-1 rounded">
+                    {selectedDocsCount} saved doc{selectedDocsCount !== 1 ? 's' : ''}
+                  </span>
+                )}
+                {hasNotes && (
+                  <span className="bg-secondary px-2 py-1 rounded">Pasted notes</span>
+                )}
+                {hasUploads && (
+                  <span className="bg-secondary px-2 py-1 rounded">
+                    {uploadedFiles.length} upload{uploadedFiles.length !== 1 ? 's' : ''}
+                  </span>
+                )}
+              </div>
             </div>
           )}
         </CardContent>
@@ -270,7 +381,7 @@ export function TestConfigForm({ onStartTest, isLoading, hasApiKey }: TestConfig
 
       {!hasContent && hasApiKey && (
         <p className="text-center text-sm text-muted-foreground">
-          Add study material by pasting notes or uploading DOCX files to get started.
+          Add study material by selecting saved documents, pasting notes, or uploading DOCX files.
         </p>
       )}
     </div>

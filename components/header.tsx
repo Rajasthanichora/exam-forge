@@ -17,9 +17,10 @@ interface HeaderProps {
   apiKey: string;
   onApiKeyChange: (key: string) => void;
   onShowHistory: () => void;
+  sectionName?: string;
 }
 
-export function Header({ apiKey, onApiKeyChange, onShowHistory }: HeaderProps) {
+export function Header({ apiKey, onApiKeyChange, onShowHistory, sectionName }: HeaderProps) {
   return (
     <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
@@ -34,6 +35,13 @@ export function Header({ apiKey, onApiKeyChange, onShowHistory }: HeaderProps) {
         </div>
 
         <div className="flex items-center gap-2">
+          {sectionName && (
+            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-secondary rounded-lg mr-2">
+              <div className="w-2 h-2 rounded-full bg-primary" />
+              <span className="text-sm text-foreground font-medium">{sectionName}</span>
+            </div>
+          )}
+          
           <Button
             variant="ghost"
             size="sm"
