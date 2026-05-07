@@ -14,6 +14,7 @@ interface TestResultsProps {
   timeTaken: number;
   onRetry: () => void;
   onNewTest: () => void;
+  uniquenessMessage?: string | null;
 }
 
 export function TestResults({
@@ -23,6 +24,7 @@ export function TestResults({
   timeTaken,
   onRetry,
   onNewTest,
+  uniquenessMessage,
 }: TestResultsProps) {
   const correctAnswers = questions.filter(
     (q) => answers[q.id] === q.correctAnswer
@@ -61,6 +63,21 @@ export function TestResults({
 
   return (
     <div className="space-y-6">
+      {/* Uniqueness Notice */}
+      {uniquenessMessage && (
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <div className="w-6 h-6 rounded-full bg-amber-500/20 flex items-center justify-center shrink-0 mt-0.5">
+              <span className="text-amber-600 text-sm font-bold">!</span>
+            </div>
+            <div>
+              <p className="font-medium text-amber-600 mb-1">Question Uniqueness Notice</p>
+              <p className="text-sm text-amber-600/80">{uniquenessMessage}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Score Overview */}
       <Card className="bg-card border-border overflow-hidden">
         <div className="bg-gradient-to-r from-primary/20 to-primary/5 p-8">
