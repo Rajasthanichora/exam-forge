@@ -162,13 +162,22 @@ ${config.studyNotes}
 
 `;
 
-  // Add information about previously used questions to avoid
+  // Add information about previously used questions to avoid - send more questions for better deduplication
   if (storedQuestions.length > 0) {
-    const recentQuestions = storedQuestions.slice(0, 50);
-    prompt += `IMPORTANT - AVOID SIMILAR QUESTIONS TO THESE PREVIOUSLY USED ONES:
-${recentQuestions.map((q, i) => `${i + 1}. ${q.questionText.substring(0, 100)}...`).join('\n')}
+    const recentQuestions = storedQuestions.slice(0, 100); // Increased from 50 to 100
+    prompt += `CRITICAL - DO NOT REPEAT OR CREATE SIMILAR QUESTIONS TO THESE ${recentQuestions.length} PREVIOUSLY USED ONES:
 
-Generate completely NEW questions that are different from the above list. Focus on different aspects, use different phrasing, and test different knowledge points.
+PREVIOUSLY USED QUESTIONS (AVOID THESE):
+${recentQuestions.map((q, i) => `${i + 1}. ${q.questionText}`).join('\n')}
+
+STRICT RULES FOR NEW QUESTIONS:
+1. Do NOT ask about the same facts/concepts covered above
+2. Do NOT rephrase or restructure any of the above questions  
+3. Focus on DIFFERENT aspects, topics, or details from the study material
+4. Use completely different question patterns and structures
+5. If you cannot generate unique questions, prefer fewer questions over repetition
+
+Generate ${config.questionCount} COMPLETELY NEW and UNIQUE questions.
 
 `;
   }

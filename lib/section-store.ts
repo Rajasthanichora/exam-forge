@@ -175,6 +175,18 @@ export function saveTestResultToSection(sectionId: string, result: TestResult): 
   });
 }
 
+// Update a test result in place (for retakes)
+export function updateTestResultInSection(sectionId: string, testId: string, updatedResult: TestResult): void {
+  const section = getSection(sectionId);
+  if (!section) return;
+
+  const testIndex = section.testResults.findIndex(t => t.id === testId);
+  if (testIndex !== -1) {
+    section.testResults[testIndex] = updatedResult;
+    updateSection(sectionId, { testResults: section.testResults });
+  }
+}
+
 export function renameTestResult(sectionId: string, testId: string, newName: string): void {
   const section = getSection(sectionId);
   if (!section) return;

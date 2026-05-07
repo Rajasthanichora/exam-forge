@@ -52,7 +52,6 @@ export function QuizInterface({ questions, onComplete }: QuizInterfaceProps) {
 
   const handleNext = () => {
     if (isLastQuestion) {
-      console.log("[v0] Quiz finished, calling onComplete with answers:", answers, "time:", elapsedTime);
       onComplete(answers, elapsedTime);
     } else {
       setCurrentIndex((prev) => prev + 1);

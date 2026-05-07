@@ -22,6 +22,7 @@ import {
   removeDocumentFromSection,
   updateSectionNotes,
   saveTestResultToSection,
+  updateTestResultInSection,
   renameTestResult,
   deleteTestResult,
   generateSimilarityReportForSection,
@@ -53,6 +54,9 @@ export default function Home() {
   const [savedDocuments, setSavedDocuments] = useState<SavedDocument[]>([]);
   const [pastedNotes, setPastedNotes] = useState('');
   const [selectedDocIds, setSelectedDocIds] = useState<string[]>([]);
+  
+  // Retake tracking - when retaking, we update the existing test instead of creating new
+  const [retakingTestId, setRetakingTestId] = useState<string | null>(null);
 
   // Load app data on mount
   useEffect(() => {
@@ -235,12 +239,7 @@ export default function Home() {
   };
 
   const handleQuizComplete = (userAnswers: Record<string, number>, time: number) => {
-    console.log("[v0] handleQuizComplete called", { activeSectionId, currentConfig, userAnswers, time });
-    
-    if (!activeSectionId || !currentConfig) {
-      console.log("[v0] Early return - missing activeSectionId or currentConfig", { activeSectionId, currentConfig });
-      return;
-    }
+    if (!activeSectionId || !currentConfig) return;
     
     setAnswers(userAnswers);
     setTimeTaken(time);
@@ -250,26 +249,47 @@ export default function Home() {
       (q) => userAnswers[q.id] === q.correctAnswer
     ).length;
 
-    // Save result to section
-    const result: TestResult = {
-      id: `test-${Date.now()}`,
-      name: `Test - ${new Date().toLocaleDateString()}`,
-      date: new Date().toISOString(),
-      config: currentConfig,
-      questions,
-      answers: userAnswers,
-      score: correctCount,
-      totalQuestions: questions.length,
-      timeTaken: time,
-    };
-    
-    console.log("[v0] Saving test result:", result);
-    saveTestResultToSection(activeSectionId, result);
+    // If retaking, update existing test; otherwise create new
+    if (retakingTestId) {
+      // Update existing test with new attempt data
+      const section = getSection(activeSectionId);
+      const existingTest = section?.testResults.find(t => t.id === retakingTestId);
+      
+      if (existingTest) {
+        const updatedResult: TestResult = {
+          ...existingTest,
+          date: new Date().toISOString(),
+          answers: userAnswers,
+          score: correctCount,
+          timeTaken: time,
+        };
+        
+        // Update in section store
+        updateTestResultInSection(activeSectionId, retakingTestId, updatedResult);
+      }
+      
+      // Clear retake state
+      setRetakingTestId(null);
+    } else {
+      // Create new test result
+      const result: TestResult = {
+        id: `test-${Date.now()}`,
+        name: `Test - ${new Date().toLocaleDateString()}`,
+        date: new Date().toISOString(),
+        config: currentConfig,
+        questions,
+        answers: userAnswers,
+        score: correctCount,
+        totalQuestions: questions.length,
+        timeTaken: time,
+      };
+      
+      saveTestResultToSection(activeSectionId, result);
+    }
     
     // Refresh sections to get updated data
     setSections(getAllSections());
     
-    console.log("[v0] Setting view to results");
     setView('results');
     toast.success('Test completed and saved!');
   };
@@ -314,8 +334,9 @@ export default function Home() {
     setQuestions(test.questions);
     setAnswers({});
     setCurrentConfig(test.config);
+    setRetakingTestId(test.id); // Track which test is being retaken
     setView('quiz');
-    toast.info('Starting retake...');
+    toast.info('Starting retake - results will update the same test');
   };
 
   const handleClearAllHistory = () => {

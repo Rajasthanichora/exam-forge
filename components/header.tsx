@@ -1,6 +1,7 @@
 'use client';
 
-import { BookOpen, History, Settings } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { BookOpen, History, Settings, Save, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -13,6 +14,8 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
+const API_KEY_STORAGE = 'examforge_openrouter_key';
+
 interface HeaderProps {
   apiKey: string;
   onApiKeyChange: (key: string) => void;
@@ -21,6 +24,29 @@ interface HeaderProps {
 }
 
 export function Header({ apiKey, onApiKeyChange, onShowHistory, sectionName }: HeaderProps) {
+  const [isSaved, setIsSaved] = useState(false);
+  const [localKey, setLocalKey] = useState(apiKey);
+  
+  // Sync local key with prop
+  useEffect(() => {
+    setLocalKey(apiKey);
+    // Check if saved in localStorage
+    const savedKey = localStorage.getItem(API_KEY_STORAGE);
+    setIsSaved(!!savedKey && savedKey === apiKey);
+  }, [apiKey]);
+  
+  const handleSaveKey = () => {
+    if (localKey) {
+      localStorage.setItem(API_KEY_STORAGE, localKey);
+      onApiKeyChange(localKey);
+      setIsSaved(true);
+    }
+  };
+  
+  const handleKeyChange = (value: string) => {
+    setLocalKey(value);
+    setIsSaved(false);
+  };
   return (
     <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
@@ -69,14 +95,35 @@ export function Header({ apiKey, onApiKeyChange, onShowHistory, sectionName }: H
               <div className="space-y-4 pt-4">
                 <div className="space-y-2">
                   <Label htmlFor="apiKey" className="text-foreground">API Key</Label>
-                  <Input
-                    id="apiKey"
-                    type="password"
-                    placeholder="sk-or-v1-..."
-                    value={apiKey}
-                    onChange={(e) => onApiKeyChange(e.target.value)}
-                    className="bg-input border-border text-foreground"
-                  />
+                  <div className="flex gap-2">
+                    <Input
+                      id="apiKey"
+                      type="password"
+                      placeholder="sk-or-v1-..."
+                      value={localKey}
+                      onChange={(e) => handleKeyChange(e.target.value)}
+                      className="bg-input border-border text-foreground flex-1"
+                    />
+                    <Button
+                      onClick={handleSaveKey}
+                      disabled={!localKey || isSaved}
+                      variant={isSaved ? "outline" : "default"}
+                      size="sm"
+                      className="shrink-0"
+                    >
+                      {isSaved ? (
+                        <>
+                          <Check className="w-4 h-4 mr-1" />
+                          Saved
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-4 h-4 mr-1" />
+                          Save
+                        </>
+                      )}
+                    </Button>
+                  </div>
                 </div>
                 <p className="text-sm text-muted-foreground">
                   Get your API key from{' '}
@@ -89,10 +136,10 @@ export function Header({ apiKey, onApiKeyChange, onShowHistory, sectionName }: H
                     openrouter.ai/keys
                   </a>
                 </p>
-                {apiKey && (
-                  <div className="flex items-center gap-2 text-sm text-success">
-                    <div className="w-2 h-2 rounded-full bg-success" />
-                    API key configured
+                {isSaved && localKey && (
+                  <div className="flex items-center gap-2 text-sm text-green-600">
+                    <div className="w-2 h-2 rounded-full bg-green-600" />
+                    API key saved to memory - no need to enter again
                   </div>
                 )}
               </div>
