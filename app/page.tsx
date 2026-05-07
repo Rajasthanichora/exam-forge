@@ -57,6 +57,9 @@ export default function Home() {
   
   // Retake tracking - when retaking, we update the existing test instead of creating new
   const [retakingTestId, setRetakingTestId] = useState<string | null>(null);
+  
+  // AI message when unique questions are exhausted
+  const [aiUniqueMessage, setAiUniqueMessage] = useState<string | null>(null);
 
   // Load app data on mount
   useEffect(() => {
@@ -218,6 +221,13 @@ export default function Home() {
       setQuestions(data.questions);
       setAnswers({});
       
+      // Store AI message if fewer questions were generated
+      if (data.message) {
+        setAiUniqueMessage(data.message);
+      } else {
+        setAiUniqueMessage(null);
+      }
+      
       // Show similarity report first if there are stored questions
       if (storedQuestions.length > 0) {
         setView('similarity');
@@ -225,7 +235,12 @@ export default function Home() {
         setView('quiz');
       }
       
-      toast.success(`Generated ${data.questions.length} questions!`);
+      // Show appropriate toast
+      if (data.message) {
+        toast.warning(`Generated ${data.questions.length} questions. ${data.message}`);
+      } else {
+        toast.success(`Generated ${data.questions.length} questions!`);
+      }
     } catch (error) {
       console.error('Error generating test:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to generate test');
@@ -304,6 +319,7 @@ export default function Home() {
     setAnswers({});
     setCurrentConfig(null);
     setSimilarityReport(null);
+    setAiUniqueMessage(null);
     setView('config');
   };
 
@@ -433,6 +449,21 @@ export default function Home() {
                 </p>
               </div>
               
+              {/* AI Uniqueness Message */}
+              {aiUniqueMessage && (
+                <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="w-6 h-6 rounded-full bg-amber-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                      <span className="text-amber-600 text-sm">!</span>
+                    </div>
+                    <div>
+                      <p className="font-medium text-amber-600 mb-1">Uniqueness Notice</p>
+                      <p className="text-sm text-amber-600/80">{aiUniqueMessage}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
               <SimilarityIndicator report={similarityReport} />
               
               <div className="flex gap-4">
@@ -464,6 +495,7 @@ export default function Home() {
               timeTaken={timeTaken}
               onRetry={handleRetry}
               onNewTest={handleNewTest}
+              uniquenessMessage={aiUniqueMessage}
             />
           )}
 

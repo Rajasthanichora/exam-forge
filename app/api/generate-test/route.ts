@@ -63,15 +63,37 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Parse the JSON response
+    // Parse the JSON response - handle both object and array formats
     let questions: Question[];
+    let aiMessage: string | null = null;
+    
     try {
-      // Try to extract JSON from the response
-      const jsonMatch = content.match(/\[[\s\S]*\]/);
-      if (jsonMatch) {
-        questions = JSON.parse(jsonMatch[0]);
+      // First try to parse as the new object format { questions: [], message: "" }
+      const objectMatch = content.match(/\{[\s\S]*\}/);
+      if (objectMatch) {
+        const parsed = JSON.parse(objectMatch[0]);
+        if (parsed.questions && Array.isArray(parsed.questions)) {
+          questions = parsed.questions;
+          aiMessage = parsed.message || null;
+        } else if (Array.isArray(parsed)) {
+          questions = parsed;
+        } else {
+          // Fallback: try to find array in response
+          const arrayMatch = content.match(/\[[\s\S]*\]/);
+          if (arrayMatch) {
+            questions = JSON.parse(arrayMatch[0]);
+          } else {
+            throw new Error('No valid questions array found');
+          }
+        }
       } else {
-        questions = JSON.parse(content);
+        // Try array format directly
+        const arrayMatch = content.match(/\[[\s\S]*\]/);
+        if (arrayMatch) {
+          questions = JSON.parse(arrayMatch[0]);
+        } else {
+          questions = JSON.parse(content);
+        }
       }
     } catch {
       console.error('Failed to parse AI response:', content);
@@ -102,7 +124,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    return NextResponse.json({ questions: validatedQuestions });
+    // Return questions with optional AI message about uniqueness
+    const response: { questions: Question[]; message?: string } = { 
+      questions: validatedQuestions 
+    };
+    
+    // Add message if AI couldn't generate all requested questions
+    if (aiMessage) {
+      response.message = aiMessage;
+    } else if (validatedQuestions.length < config.questionCount) {
+      response.message = `Only ${validatedQuestions.length} unique questions could be generated. The study material may have been exhausted for new unique questions.`;
+    }
+
+    return NextResponse.json(response);
   } catch (error) {
     console.error('Error generating test:', error);
     return NextResponse.json(
@@ -119,24 +153,29 @@ function getSystemPrompt(language: string): string {
     hinglish: 'Generate questions in Hinglish - a natural mix of Hindi and English as commonly used in conversation. Use Roman script with Hindi words mixed in naturally.',
   };
 
-  return `You are an expert exam question generator specializing in creating unique, non-repetitive multiple-choice questions.
+  return `You are an expert exam question generator specializing in creating UNIQUE, non-repetitive multiple-choice questions.
 
-CRITICAL REQUIREMENTS:
-- Return ONLY valid JSON array, no markdown or extra text
+CRITICAL OUTPUT FORMAT:
+- Return a JSON object with this structure: { "questions": [...], "message": "..." }
+- "questions" is an array of question objects
+- "message" is optional - include ONLY if you couldn't generate all requested questions
+- Example message: "Only 5 unique questions could be generated. The study material has been exhausted for new unique questions."
+
+QUESTION REQUIREMENTS:
 - Each question must have exactly 4 options
 - The correctAnswer field must be the index (0-3) of the correct option
 - Include a brief, educational explanation for each answer
-- Questions must be UNIQUE and avoid any similarity to previously used questions
-- Extract key concepts from the study material and create diverse question types
+- Questions must be COMPLETELY UNIQUE - different concepts, different phrasing, different angles
 
 LANGUAGE: ${languageInstructions[language] || languageInstructions.english}
 
-QUESTION DIVERSITY RULES:
-1. Vary question types: factual recall, application, analysis, comparison
-2. Cover different aspects of each topic
-3. Use different question formats: direct questions, fill-in-blanks, scenario-based
-4. Avoid repeating similar phrasing or patterns
-5. If the study material covers multiple topics, distribute questions across all topics`;
+UNIQUENESS IS CRITICAL:
+1. Understand the INTENT of previously used questions, not just the exact wording
+2. You CAN twist the language, change difficulty level, use different angles
+3. But you CANNOT ask about the same fact/concept that was already tested
+4. Focus on UNTESTED aspects of the study material
+5. If you run out of unique concepts to test, generate FEWER questions rather than repeat
+6. Vary question types: factual recall, application, analysis, comparison, scenario-based`;
 }
 
 function buildPrompt(config: TestConfig, storedQuestions: StoredQuestion[]): string {
@@ -162,43 +201,55 @@ ${config.studyNotes}
 
 `;
 
-  // Add information about previously used questions to avoid - send more questions for better deduplication
+  // Send ALL previously used questions for better deduplication
   if (storedQuestions.length > 0) {
-    const recentQuestions = storedQuestions.slice(0, 100); // Increased from 50 to 100
-    prompt += `CRITICAL - DO NOT REPEAT OR CREATE SIMILAR QUESTIONS TO THESE ${recentQuestions.length} PREVIOUSLY USED ONES:
+    prompt += `
+==============================================================
+PREVIOUSLY USED QUESTIONS - DO NOT REPEAT THESE CONCEPTS
+==============================================================
+Total previously used: ${storedQuestions.length} questions
 
-PREVIOUSLY USED QUESTIONS (AVOID THESE):
-${recentQuestions.map((q, i) => `${i + 1}. ${q.questionText}`).join('\n')}
+${storedQuestions.map((q, i) => `${i + 1}. ${q.questionText}`).join('\n')}
 
-STRICT RULES FOR NEW QUESTIONS:
-1. Do NOT ask about the same facts/concepts covered above
-2. Do NOT rephrase or restructure any of the above questions  
-3. Focus on DIFFERENT aspects, topics, or details from the study material
-4. Use completely different question patterns and structures
-5. If you cannot generate unique questions, prefer fewer questions over repetition
+==============================================================
+STRICT UNIQUENESS RULES:
+==============================================================
+1. Understand the INTENT and CONCEPT of each question above
+2. Do NOT test the same fact/concept even with different wording
+3. Do NOT rephrase, restructure, or reword any question above
+4. ONLY test concepts/facts NOT covered in the above list
+5. Use the SAME source material but find UNTESTED aspects
+6. You MAY change difficulty level, question format, or language style
+7. If ALL concepts from study material are exhausted, generate FEWER questions
 
-Generate ${config.questionCount} COMPLETELY NEW and UNIQUE questions.
+IMPORTANT: If you cannot generate ${config.questionCount} unique questions:
+- Generate as many TRULY UNIQUE questions as possible
+- Include a "message" field explaining how many you could generate
+- Example: "message": "Only 3 unique questions possible. All other concepts from the study material have been tested."
 
 `;
   }
 
-  prompt += `OUTPUT FORMAT - Return a JSON array with this exact structure:
-[
-  {
-    "question": "The complete question text",
-    "options": ["Option A", "Option B", "Option C", "Option D"],
-    "correctAnswer": 0,
-    "explanation": "Brief explanation of why this answer is correct and why others are wrong",
-    "topic": "Specific topic/concept this question tests"
-  }
-]
+  prompt += `OUTPUT FORMAT - Return a JSON object with this exact structure:
+{
+  "questions": [
+    {
+      "question": "The complete question text",
+      "options": ["Option A", "Option B", "Option C", "Option D"],
+      "correctAnswer": 0,
+      "explanation": "Brief explanation of why this answer is correct",
+      "topic": "Specific topic/concept this question tests"
+    }
+  ],
+  "message": "Optional - only include if you couldn't generate all ${config.questionCount} questions"
+}
 
 FINAL CHECKLIST:
-- Generate EXACTLY ${config.questionCount} questions
+- Try to generate ${config.questionCount} UNIQUE questions
+- If unique concepts are exhausted, generate fewer but include "message" explaining why
 - All 4 options must be plausible but only one correct
-- Questions must be clear and unambiguous
-- Each question tests a distinct concept or fact
-- No repetition of similar questions`;
+- Each question must test a DIFFERENT concept/fact
+- NEVER repeat or rephrase previously used questions`;
 
   return prompt;
 }
