@@ -186,12 +186,12 @@ export function TestHistory({ onClose }: TestHistoryProps) {
               return (
                 <div
                   key={result.id}
-                  className="flex items-center gap-4 p-4 rounded-lg bg-secondary/50 border border-border"
+                  className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 p-4 rounded-lg bg-secondary/50 border border-border"
                 >
                   <div className={`text-3xl font-bold ${getScoreColor(percentage)}`}>
                     {percentage}%
                   </div>
-                  <div className="flex-1">
+                  <div className="flex-1 min-w-0">
                     <p className="font-medium text-foreground">{result.config.language.charAt(0).toUpperCase() + result.config.language.slice(1)} Test</p>
                     <div className="flex flex-wrap gap-2 mt-1">
                       <Badge variant="outline" className="text-xs border-border text-muted-foreground capitalize">
@@ -205,7 +205,7 @@ export function TestHistory({ onClose }: TestHistoryProps) {
                       </span>
                     </div>
                   </div>
-                  <div className="text-right">
+                  <div className="text-left sm:text-right sm:ml-auto">
                     <p className="text-sm text-muted-foreground">{formatDate(result.date)}</p>
                     {result.timeTaken && (
                       <p className="text-xs text-muted-foreground">
@@ -213,7 +213,7 @@ export function TestHistory({ onClose }: TestHistoryProps) {
                       </p>
                     )}
                   </div>
-                  <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                  <ChevronRight className="w-5 h-5 text-muted-foreground hidden sm:block" />
                 </div>
               );
             })}

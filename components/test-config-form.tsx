@@ -127,16 +127,16 @@ export function TestConfigForm({
           <Tabs value={inputMethod} onValueChange={(v) => setInputMethod(v as 'paste' | 'upload' | 'saved')}>
             <TabsList className="grid w-full grid-cols-3 bg-secondary">
               <TabsTrigger value="saved" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-                <FolderOpen className="w-4 h-4 mr-2" />
-                Saved ({savedDocuments.length})
+                <FolderOpen className="w-4 h-4 mr-0 sm:mr-2" />
+                <span className="hidden sm:inline">Saved ({savedDocuments.length})</span>
               </TabsTrigger>
               <TabsTrigger value="paste" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
                 <FileText className="w-4 h-4 mr-2" />
-                Paste Notes
+                <span className="hidden sm:inline">Paste Notes</span>
               </TabsTrigger>
               <TabsTrigger value="upload" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
                 <FileText className="w-4 h-4 mr-2" />
-                Upload DOCX
+                <span className="hidden sm:inline">Upload DOCX</span>
               </TabsTrigger>
             </TabsList>
             
@@ -246,7 +246,7 @@ export function TestConfigForm({
           <RadioGroup
             value={language}
             onValueChange={(v) => setLanguage(v as Language)}
-            className="grid grid-cols-3 gap-4"
+            className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4"
           >
             {languageOptions.map((lang) => (
               <div key={lang.value}>
@@ -257,7 +257,7 @@ export function TestConfigForm({
                 />
                 <Label
                   htmlFor={`lang-${lang.value}`}
-                  className={`flex flex-col items-center justify-center rounded-lg border-2 p-4 cursor-pointer transition-all
+                  className={`flex flex-row sm:flex-col items-center justify-start sm:justify-center rounded-lg border-2 p-3 sm:p-4 cursor-pointer transition-all gap-2 sm:gap-0
                     ${language === lang.value 
                       ? 'border-primary bg-primary/10' 
                       : 'border-border bg-secondary/50 hover:border-primary/50'
@@ -266,7 +266,7 @@ export function TestConfigForm({
                   <span className={`font-medium ${language === lang.value ? 'text-primary' : 'text-foreground'}`}>
                     {lang.label}
                   </span>
-                  <span className="text-xs text-muted-foreground text-center mt-1">
+                  <span className="text-xs text-muted-foreground text-center sm:mt-1 hidden sm:block">
                     {lang.description}
                   </span>
                 </Label>
@@ -291,7 +291,7 @@ export function TestConfigForm({
             <RadioGroup
               value={difficulty}
               onValueChange={(v) => setDifficulty(v as Difficulty)}
-              className="grid grid-cols-3 gap-4"
+              className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4"
             >
               {(['easy', 'medium', 'hard'] as Difficulty[]).map((level) => (
                 <div key={level}>
@@ -302,7 +302,7 @@ export function TestConfigForm({
                   />
                   <Label
                     htmlFor={level}
-                    className={`flex flex-col items-center justify-center rounded-lg border-2 p-4 cursor-pointer transition-all
+                    className={`flex flex-row sm:flex-col items-center justify-start sm:justify-center rounded-lg border-2 p-3 sm:p-4 cursor-pointer transition-all gap-2 sm:gap-0
                       ${difficulty === level 
                         ? 'border-primary bg-primary/10' 
                         : 'border-border bg-secondary/50 hover:border-primary/50'
@@ -311,7 +311,7 @@ export function TestConfigForm({
                     <span className={`font-medium capitalize ${difficulty === level ? 'text-primary' : 'text-foreground'}`}>
                       {difficultyDescriptions[level].label}
                     </span>
-                    <span className="text-xs text-muted-foreground text-center mt-1">
+                    <span className="text-xs text-muted-foreground text-center sm:mt-1 hidden sm:block">
                       {difficultyDescriptions[level].description}
                     </span>
                   </Label>

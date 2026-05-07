@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { BookOpen, History, Settings, Save, Check } from 'lucide-react';
+import { BookOpen, History, Settings, Save, Check, Trash2, Menu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -14,32 +14,77 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
-const API_KEY_STORAGE = 'examforge_openrouter_key';
-
 interface HeaderProps {
   apiKey: string;
-  onApiKeyChange: (key: string) => void;
+  onApiKeyChange: (key: string) => Promise<void> | void;
+  geminiApiKey: string;
+  onGeminiApiKeyChange: (key: string) => Promise<void> | void;
+  aiProvider: 'openrouter' | 'gemini';
+  onAiProviderChange: (provider: 'openrouter' | 'gemini') => Promise<void> | void;
   onShowHistory: () => void;
   sectionName?: string;
+  onOpenSidebar?: () => void;
 }
 
-export function Header({ apiKey, onApiKeyChange, onShowHistory, sectionName }: HeaderProps) {
+export function Header({ apiKey, onApiKeyChange, geminiApiKey, onGeminiApiKeyChange, aiProvider, onAiProviderChange, onShowHistory, sectionName, onOpenSidebar }: HeaderProps) {
   const [isSaved, setIsSaved] = useState(false);
+  const [isGeminiSaved, setIsGeminiSaved] = useState(false);
   const [localKey, setLocalKey] = useState(apiKey);
+  const [localGeminiKey, setLocalGeminiKey] = useState(geminiApiKey);
+  const [isSaving, setIsSaving] = useState(false);
   
   // Sync local key with prop
   useEffect(() => {
     setLocalKey(apiKey);
-    // Check if saved in localStorage
-    const savedKey = localStorage.getItem(API_KEY_STORAGE);
-    setIsSaved(!!savedKey && savedKey === apiKey);
+    setIsSaved(!!apiKey);
   }, [apiKey]);
+
+  useEffect(() => {
+    setLocalGeminiKey(geminiApiKey);
+    setIsGeminiSaved(!!geminiApiKey);
+  }, [geminiApiKey]);
   
-  const handleSaveKey = () => {
-    if (localKey) {
-      localStorage.setItem(API_KEY_STORAGE, localKey);
-      onApiKeyChange(localKey);
+  const handleSaveKey = async () => {
+    if (!localKey) return;
+    try {
+      setIsSaving(true);
+      await onApiKeyChange(localKey);
       setIsSaved(true);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteKey = async () => {
+    try {
+      setIsSaving(true);
+      setLocalKey('');
+      await onApiKeyChange('');
+      setIsSaved(false);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveGeminiKey = async () => {
+    if (!localGeminiKey) return;
+    try {
+      setIsSaving(true);
+      await onGeminiApiKeyChange(localGeminiKey);
+      setIsGeminiSaved(true);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteGeminiKey = async () => {
+    try {
+      setIsSaving(true);
+      setLocalGeminiKey('');
+      await onGeminiApiKeyChange('');
+      setIsGeminiSaved(false);
+    } finally {
+      setIsSaving(false);
     }
   };
   
@@ -49,8 +94,19 @@ export function Header({ apiKey, onApiKeyChange, onShowHistory, sectionName }: H
   };
   return (
     <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
-      <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+      <div className="container mx-auto px-3 sm:px-4 h-16 flex items-center justify-between">
         <div className="flex items-center gap-3">
+          {onOpenSidebar && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onOpenSidebar}
+              className="md:hidden text-muted-foreground hover:text-foreground"
+              aria-label="Open sections"
+            >
+              <Menu className="w-5 h-5" />
+            </Button>
+          )}
           <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
             <BookOpen className="w-5 h-5 text-primary-foreground" />
           </div>
@@ -72,30 +128,83 @@ export function Header({ apiKey, onApiKeyChange, onShowHistory, sectionName }: H
             variant="ghost"
             size="sm"
             onClick={onShowHistory}
-            className="text-muted-foreground hover:text-foreground"
+            className="text-muted-foreground hover:text-foreground hidden sm:flex"
           >
             <History className="w-4 h-4 mr-2" />
             History
           </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onShowHistory}
+            className="text-muted-foreground hover:text-foreground sm:hidden"
+          >
+            <History className="w-5 h-5" />
+          </Button>
 
           <Dialog>
             <DialogTrigger asChild>
-              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
-                <Settings className="w-4 h-4 mr-2" />
-                API Key
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground hover:text-foreground"
+                aria-label="API key settings"
+              >
+                <Settings className="w-4 h-4 sm:mr-2" />
+                <span className="hidden sm:inline">API Key</span>
               </Button>
             </DialogTrigger>
-            <DialogContent className="bg-card border-border">
+            <DialogContent className="bg-card border-border max-w-[95vw] sm:max-w-lg max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle className="text-foreground">OpenRouter API Key</DialogTitle>
+                <DialogTitle className="text-foreground">API Keys</DialogTitle>
                 <DialogDescription className="text-muted-foreground">
-                  Enter your OpenRouter API key to enable AI-powered test generation.
+                  Save your keys and choose which provider to use for test generation.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 pt-4">
                 <div className="space-y-2">
-                  <Label htmlFor="apiKey" className="text-foreground">API Key</Label>
+                  <Label className="text-foreground">AI Provider</Label>
                   <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={aiProvider === 'openrouter' ? 'default' : 'outline'}
+                      disabled={isSaving}
+                      onClick={async () => {
+                        try {
+                          setIsSaving(true);
+                          await onAiProviderChange('openrouter');
+                        } finally {
+                          setIsSaving(false);
+                        }
+                      }}
+                      className="flex-1"
+                    >
+                      OpenRouter
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={aiProvider === 'gemini' ? 'default' : 'outline'}
+                      disabled={isSaving}
+                      onClick={async () => {
+                        try {
+                          setIsSaving(true);
+                          await onAiProviderChange('gemini');
+                        } finally {
+                          setIsSaving(false);
+                        }
+                      }}
+                      className="flex-1"
+                    >
+                      Gemini
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="apiKey" className="text-foreground">OpenRouter API Key</Label>
+                  <div className="flex flex-col sm:flex-row gap-2">
                     <Input
                       id="apiKey"
                       type="password"
@@ -104,25 +213,85 @@ export function Header({ apiKey, onApiKeyChange, onShowHistory, sectionName }: H
                       onChange={(e) => handleKeyChange(e.target.value)}
                       className="bg-input border-border text-foreground flex-1"
                     />
-                    <Button
-                      onClick={handleSaveKey}
-                      disabled={!localKey || isSaved}
-                      variant={isSaved ? "outline" : "default"}
-                      size="sm"
-                      className="shrink-0"
-                    >
-                      {isSaved ? (
-                        <>
-                          <Check className="w-4 h-4 mr-1" />
-                          Saved
-                        </>
-                      ) : (
-                        <>
-                          <Save className="w-4 h-4 mr-1" />
-                          Save
-                        </>
-                      )}
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={handleSaveKey}
+                        disabled={!localKey || isSaved || isSaving}
+                        variant={isSaved ? "outline" : "default"}
+                        size="sm"
+                        className="flex-1 sm:flex-none"
+                      >
+                        {isSaved ? (
+                          <>
+                            <Check className="w-4 h-4 mr-1" />
+                            Saved
+                          </>
+                        ) : (
+                          <>
+                            <Save className="w-4 h-4 mr-1" />
+                            Save
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        onClick={handleDeleteKey}
+                        disabled={(!apiKey && !localKey) || isSaving}
+                        variant="destructive"
+                        size="sm"
+                        className="shrink-0"
+                        title="Delete API key"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="geminiApiKey" className="text-foreground">Google Gemini API Key</Label>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <Input
+                      id="geminiApiKey"
+                      type="password"
+                      placeholder="AIza..."
+                      value={localGeminiKey}
+                      onChange={(e) => {
+                        setLocalGeminiKey(e.target.value);
+                        setIsGeminiSaved(false);
+                      }}
+                      className="bg-input border-border text-foreground flex-1"
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={handleSaveGeminiKey}
+                        disabled={!localGeminiKey || isGeminiSaved || isSaving}
+                        variant={isGeminiSaved ? "outline" : "default"}
+                        size="sm"
+                        className="flex-1 sm:flex-none"
+                      >
+                        {isGeminiSaved ? (
+                          <>
+                            <Check className="w-4 h-4 mr-1" />
+                            Saved
+                          </>
+                        ) : (
+                          <>
+                            <Save className="w-4 h-4 mr-1" />
+                            Save
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        onClick={handleDeleteGeminiKey}
+                        disabled={(!geminiApiKey && !localGeminiKey) || isSaving}
+                        variant="destructive"
+                        size="sm"
+                        className="shrink-0"
+                        title="Delete Gemini API key"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
                 </div>
                 <p className="text-sm text-muted-foreground">
@@ -139,7 +308,13 @@ export function Header({ apiKey, onApiKeyChange, onShowHistory, sectionName }: H
                 {isSaved && localKey && (
                   <div className="flex items-center gap-2 text-sm text-green-600">
                     <div className="w-2 h-2 rounded-full bg-green-600" />
-                    API key saved to memory - no need to enter again
+                    API key saved - no need to enter again
+                  </div>
+                )}
+                {isGeminiSaved && localGeminiKey && (
+                  <div className="flex items-center gap-2 text-sm text-green-600">
+                    <div className="w-2 h-2 rounded-full bg-green-600" />
+                    Gemini API key saved - no need to enter again
                   </div>
                 )}
               </div>

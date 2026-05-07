@@ -4,57 +4,97 @@ import { Question, TestConfig, Difficulty, StoredQuestion } from '@/lib/types';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { config, apiKey, storedQuestions } = body as {
+    const { config, provider, apiKey, geminiApiKey, storedQuestions } = body as {
       config: TestConfig;
+      provider?: 'openrouter' | 'gemini';
       apiKey: string;
+      geminiApiKey?: string;
       storedQuestions: StoredQuestion[];
     };
 
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: 'OpenRouter API key is required' },
-        { status: 400 }
-      );
-    }
+    const selectedProvider: 'openrouter' | 'gemini' = provider === 'gemini' ? 'gemini' : 'openrouter';
 
     const prompt = buildPrompt(config, storedQuestions);
 
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'HTTP-Referer': 'https://examforge.ai',
-        'X-Title': 'ExamForge AI',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'openai/gpt-4o-mini',
-        messages: [
-          {
-            role: 'system',
-            content: getSystemPrompt(config.language)
-          },
-          {
-            role: 'user',
-            content: prompt
+    let response: Response;
+    if (selectedProvider === 'gemini') {
+      if (!geminiApiKey) {
+        return NextResponse.json(
+          { error: 'Gemini API key is required' },
+          { status: 400 }
+        );
+      }
+
+      // Gemini API (Generative Language API)
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(geminiApiKey)}`;
+      response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                {
+                  text: `${getSystemPrompt(config.language)}\n\n${prompt}`
+                }
+              ]
+            }
+          ],
+          generationConfig: {
+            temperature: 0.85,
+            maxOutputTokens: 6000,
           }
-        ],
-        temperature: 0.85,
-        max_tokens: 6000,
-      }),
-    });
+        }),
+      });
+    } else {
+      if (!apiKey) {
+        return NextResponse.json(
+          { error: 'OpenRouter API key is required' },
+          { status: 400 }
+        );
+      }
+
+      response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'HTTP-Referer': 'https://examforge.ai',
+          'X-Title': 'ExamForge AI',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'openai/gpt-4o-mini',
+          messages: [
+            {
+              role: 'system',
+              content: getSystemPrompt(config.language)
+            },
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+          temperature: 0.85,
+          max_tokens: 6000,
+        }),
+      });
+    }
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      console.error('OpenRouter API error:', errorData);
+      console.error(`${selectedProvider} API error:`, errorData);
       return NextResponse.json(
-        { error: errorData.error?.message || 'Failed to generate questions. Please check your API key.' },
+        { error: errorData.error?.message || errorData.message || 'Failed to generate questions. Please check your API key.' },
         { status: response.status }
       );
     }
 
     const data = await response.json();
-    const content = data.choices?.[0]?.message?.content;
+    const content =
+      selectedProvider === 'gemini'
+        ? data.candidates?.[0]?.content?.parts?.[0]?.text
+        : data.choices?.[0]?.message?.content;
 
     if (!content) {
       return NextResponse.json(
@@ -125,18 +165,18 @@ export async function POST(request: NextRequest) {
     }
 
     // Return questions with optional AI message about uniqueness
-    const response: { questions: Question[]; message?: string } = { 
+    const result: { questions: Question[]; message?: string } = { 
       questions: validatedQuestions 
     };
     
     // Add message if AI couldn't generate all requested questions
     if (aiMessage) {
-      response.message = aiMessage;
+      result.message = aiMessage;
     } else if (validatedQuestions.length < config.questionCount) {
-      response.message = `Only ${validatedQuestions.length} unique questions could be generated. The study material may have been exhausted for new unique questions.`;
+      result.message = `Only ${validatedQuestions.length} unique questions could be generated. The study material may have been exhausted for new unique questions.`;
     }
 
-    return NextResponse.json(response);
+    return NextResponse.json(result);
   } catch (error) {
     console.error('Error generating test:', error);
     return NextResponse.json(

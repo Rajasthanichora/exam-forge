@@ -119,8 +119,8 @@ export function QuizInterface({ questions, onComplete }: QuizInterfaceProps) {
       {/* Progress Header */}
       <Card className="bg-card border-border">
         <CardContent className="pt-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-4">
               <Badge variant="outline" className="text-foreground border-border">
                 Question {currentIndex + 1} of {questions.length}
               </Badge>
@@ -133,7 +133,7 @@ export function QuizInterface({ questions, onComplete }: QuizInterfaceProps) {
                 </Badge>
               )}
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4">
               <div className="flex items-center gap-2 text-muted-foreground">
                 <Clock className="w-4 h-4" />
                 <span className="font-mono">{formatTime(elapsedTime)}</span>
@@ -159,7 +159,7 @@ export function QuizInterface({ questions, onComplete }: QuizInterfaceProps) {
       {/* Question Card */}
       <Card className="bg-card border-border">
         <CardHeader>
-          <CardTitle className="text-xl text-foreground leading-relaxed">
+          <CardTitle className="text-lg sm:text-xl text-foreground leading-relaxed">
             {currentQuestion.question}
           </CardTitle>
         </CardHeader>
@@ -169,7 +169,7 @@ export function QuizInterface({ questions, onComplete }: QuizInterfaceProps) {
               key={index}
               onClick={() => handleAnswerSelect(index)}
               disabled={showFeedback}
-              className={getOptionClass(index)}
+              className={getOptionClass(index).replace('p-4', 'p-3 sm:p-4')}
             >
               <span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium shrink-0 ${
                 showFeedback && index === currentQuestion.correctAnswer
@@ -226,23 +226,23 @@ export function QuizInterface({ questions, onComplete }: QuizInterfaceProps) {
       )}
 
       {/* Navigation */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-2">
         <Button
           variant="outline"
           onClick={handlePrevious}
           disabled={currentIndex === 0}
-          className="border-border text-foreground"
+          className="border-border text-foreground w-full sm:w-auto order-2 sm:order-1"
         >
           <ChevronLeft className="w-4 h-4 mr-2" />
           Previous
         </Button>
 
-        <div className="flex gap-1 overflow-x-auto max-w-md px-2">
+        <div className="flex gap-1 overflow-x-auto max-w-full sm:max-w-md px-2 py-1 order-1 sm:order-2 scrollbar-thin">
           {questions.map((q, index) => (
             <button
               key={q.id}
               onClick={() => jumpToQuestion(index)}
-              className={`w-8 h-8 rounded text-xs font-medium shrink-0 transition-all ${
+              className={`w-7 h-7 sm:w-8 sm:h-8 rounded text-xs font-medium shrink-0 transition-all ${
                 index === currentIndex
                   ? 'bg-primary text-primary-foreground'
                   : answers[q.id] !== undefined
@@ -262,7 +262,7 @@ export function QuizInterface({ questions, onComplete }: QuizInterfaceProps) {
         <Button
           onClick={handleNext}
           disabled={!showFeedback}
-          className="bg-primary hover:bg-primary/90 text-primary-foreground"
+          className="bg-primary hover:bg-primary/90 text-primary-foreground w-full sm:w-auto order-3"
         >
           {isLastQuestion ? 'Finish Test' : 'Next'}
           {!isLastQuestion && <ChevronRight className="w-4 h-4 ml-2" />}

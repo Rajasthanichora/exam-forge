@@ -192,14 +192,14 @@ export function SectionHistory({
                 return (
                   <div
                     key={result.id}
-                    className="flex items-center gap-4 p-4 rounded-lg bg-secondary/50 border border-border"
+                    className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 p-4 rounded-lg bg-secondary/50 border border-border"
                   >
-                    <div className={`text-3xl font-bold ${getScoreColor(percentage)} min-w-[60px]`}>
+                    <div className={`text-3xl font-bold ${getScoreColor(percentage)} sm:min-w-[60px]`}>
                       {percentage}%
                     </div>
                     <div className="flex-1 min-w-0">
                       {editingId === result.id ? (
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                           <Input
                             value={editName}
                             onChange={(e) => setEditName(e.target.value)}
@@ -237,7 +237,7 @@ export function SectionHistory({
                         </>
                       )}
                     </div>
-                    <div className="text-right">
+                    <div className="text-left sm:text-right sm:ml-auto">
                       <p className="text-sm text-muted-foreground">{formatDate(result.date)}</p>
                       {result.timeTaken && (
                         <p className="text-xs text-muted-foreground">
@@ -247,7 +247,7 @@ export function SectionHistory({
                     </div>
                     
                     {editingId !== result.id && (
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 sm:ml-2">
                         <Button
                           variant="ghost"
                           size="icon"
@@ -275,7 +275,7 @@ export function SectionHistory({
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
-                        <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                        <ChevronRight className="w-5 h-5 text-muted-foreground hidden sm:block" />
                       </div>
                     )}
                   </div>

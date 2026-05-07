@@ -61,6 +61,8 @@ export interface Section {
 export interface AppData {
   sections: Section[];
   apiKey: string;
+  geminiApiKey: string;
+  aiProvider: 'openrouter' | 'gemini';
   activeSectionId: string | null;
 }
 

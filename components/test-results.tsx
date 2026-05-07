@@ -80,17 +80,17 @@ export function TestResults({
 
       {/* Score Overview */}
       <Card className="bg-card border-border overflow-hidden">
-        <div className="bg-gradient-to-r from-primary/20 to-primary/5 p-8">
+        <div className="bg-gradient-to-r from-primary/20 to-primary/5 p-5 sm:p-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="text-center md:text-left">
               <p className="text-muted-foreground mb-2">Your Score</p>
               <div className="flex items-end gap-2">
-                <span className={`text-6xl font-bold ${color}`}>{percentage}%</span>
-                <span className={`text-4xl font-bold ${color}`}>{grade}</span>
+                <span className={`text-4xl sm:text-6xl font-bold ${color}`}>{percentage}%</span>
+                <span className={`text-3xl sm:text-4xl font-bold ${color}`}>{grade}</span>
               </div>
               <p className="text-xl text-foreground mt-2">{message}</p>
             </div>
-            <div className="w-40 h-40 relative">
+            <div className="w-28 h-28 sm:w-40 sm:h-40 relative">
               <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
                 <circle
                   cx="50"
@@ -113,7 +113,7 @@ export function TestResults({
                 />
               </svg>
               <div className="absolute inset-0 flex items-center justify-center">
-                <Trophy className={`w-12 h-12 ${color}`} />
+                <Trophy className={`w-10 h-10 sm:w-12 sm:h-12 ${color}`} />
               </div>
             </div>
           </div>
