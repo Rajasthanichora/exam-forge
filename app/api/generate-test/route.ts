@@ -4,15 +4,19 @@ import { Question, TestConfig, Difficulty, StoredQuestion } from '@/lib/types';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { config, provider, apiKey, geminiApiKey, storedQuestions } = body as {
+    const { config, provider, model, apiKey, geminiApiKey, storedQuestions } = body as {
       config: TestConfig;
       provider?: 'openrouter' | 'gemini';
+      model?: string;
       apiKey: string;
       geminiApiKey?: string;
       storedQuestions: StoredQuestion[];
     };
 
     const selectedProvider: 'openrouter' | 'gemini' = provider === 'gemini' ? 'gemini' : 'openrouter';
+    const selectedModel =
+      model?.trim() ||
+      (selectedProvider === 'gemini' ? 'gemini-2.0-flash' : 'meta-llama/llama-3.3-70b-instruct:free');
 
     const prompt = buildPrompt(config, storedQuestions);
 
@@ -26,7 +30,7 @@ export async function POST(request: NextRequest) {
       }
 
       // Gemini API (Generative Language API)
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(geminiApiKey)}`;
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(selectedModel)}:generateContent?key=${encodeURIComponent(geminiApiKey)}`;
       response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -64,7 +68,7 @@ export async function POST(request: NextRequest) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'openai/gpt-4o-mini',
+          model: selectedModel,
           messages: [
             {
               role: 'system',
@@ -84,10 +88,8 @@ export async function POST(request: NextRequest) {
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       console.error(`${selectedProvider} API error:`, errorData);
-      return NextResponse.json(
-        { error: errorData.error?.message || errorData.message || 'Failed to generate questions. Please check your API key.' },
-        { status: response.status }
-      );
+      const providerError = getProviderErrorMessage(selectedProvider, errorData);
+      return NextResponse.json({ error: providerError }, { status: response.status });
     }
 
     const data = await response.json();
@@ -155,7 +157,8 @@ export async function POST(request: NextRequest) {
         difficulty: config.difficulty,
         topic: String(q.topic || 'General'),
       }))
-      .filter((q: Question) => q.question && q.options.length === 4);
+      .filter((q: Question) => q.question && q.options.length === 4)
+      .map(shuffleQuestionOptions);
 
     if (validatedQuestions.length === 0) {
       return NextResponse.json(
@@ -283,7 +286,6 @@ IMPORTANT: If you cannot generate ${config.questionCount} unique questions:
   ],
   "message": "Optional - only include if you couldn't generate all ${config.questionCount} questions"
 }
-
 FINAL CHECKLIST:
 - Try to generate ${config.questionCount} UNIQUE questions
 - If unique concepts are exhausted, generate fewer but include "message" explaining why
@@ -292,4 +294,51 @@ FINAL CHECKLIST:
 - NEVER repeat or rephrase previously used questions`;
 
   return prompt;
+}
+
+function shuffleQuestionOptions(question: Question): Question {
+  const optionEntries = question.options.map((option, index) => ({
+    option,
+    originalIndex: index,
+  }));
+
+  for (let i = optionEntries.length - 1; i > 0; i--) {
+    const randomIndex = Math.floor(Math.random() * (i + 1));
+    [optionEntries[i], optionEntries[randomIndex]] = [optionEntries[randomIndex], optionEntries[i]];
+  }
+
+  const shuffledOptions = optionEntries.map((entry) => entry.option);
+  const updatedCorrectAnswer = optionEntries.findIndex(
+    (entry) => entry.originalIndex === question.correctAnswer
+  );
+
+  return {
+    ...question,
+    options: shuffledOptions,
+    correctAnswer: updatedCorrectAnswer >= 0 ? updatedCorrectAnswer : question.correctAnswer,
+  };
+}
+
+function getProviderErrorMessage(provider: 'openrouter' | 'gemini', errorData: any): string {
+  const fallback = 'Failed to generate questions. Please check your API key.';
+  const rawMessage =
+    errorData?.error?.message ||
+    errorData?.message ||
+    errorData?.error?.status ||
+    '';
+
+  if (provider === 'gemini') {
+    const text = String(rawMessage || '').toLowerCase();
+    const quotaExceeded =
+      text.includes('quota exceeded') ||
+      text.includes('rate limit') ||
+      text.includes('free_tier_requests') ||
+      text.includes('free_tier_input_token_count');
+
+    if (quotaExceeded) {
+      return 'Gemini free quota abhi exhausted hai for this key/project. Thoda wait karke retry karein, ya OpenRouter provider use karein.';
+    }
+  }
+
+  return rawMessage || fallback;
 }

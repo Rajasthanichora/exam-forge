@@ -17,6 +17,7 @@ export interface TestConfig {
   questionCount: number;
   language: Language;
   customPrompt: string;
+  aiModel?: string;
   sectionId?: string;
   sectionName?: string;
 }
@@ -38,6 +39,7 @@ export interface StoredQuestion {
   questionText: string;
   topic?: string;
   dateUsed: string;
+  testId?: string;
 }
 
 export interface SavedDocument {

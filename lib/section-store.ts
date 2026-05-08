@@ -276,6 +276,7 @@ export async function initializeFromSupabase(): Promise<AppData & { supabaseConn
               questionText: q.question_text,
               topic: q.topic,
               dateUsed: q.date_used,
+              testId: q.test_id || undefined,
             });
           }
         });
@@ -416,8 +417,8 @@ export async function saveAppData(data: Partial<AppData>): Promise<void> {
 
     const upsertData: Record<string, unknown> = {
       id: 1,
-      api_key: data.apiKey !== undefined ? data.apiKey : current.apiKey,
-      gemini_api_key: data.geminiApiKey !== undefined ? data.geminiApiKey : current.geminiApiKey,
+      api_key: data.apiKey !== undefined ? (data.apiKey || null) : (current.apiKey || null),
+      gemini_api_key: data.geminiApiKey !== undefined ? (data.geminiApiKey || null) : (current.geminiApiKey || null),
       ai_provider: data.aiProvider !== undefined ? data.aiProvider : current.aiProvider,
       active_section_id: data.activeSectionId !== undefined ? data.activeSectionId : current.activeSectionId,
       updated_at: new Date().toISOString(),
@@ -425,13 +426,18 @@ export async function saveAppData(data: Partial<AppData>): Promise<void> {
     
     logSupabase('Upserting app_settings', upsertData, 'saveAppData');
 
+    // Ensure row exists so update/upsert remains deterministic
+    await supabase
+      .from('app_settings')
+      .upsert({ id: 1 }, { onConflict: 'id' });
+
     // Update app settings in Supabase
     let { data: result, error } = await supabase
       .from('app_settings')
-      .upsert(upsertData)
+      .upsert(upsertData, { onConflict: 'id' })
       .select();
     
-    // If new columns aren't migrated yet, retry without them.
+    // If optional columns aren't migrated yet, retry while keeping available columns.
     if (error) {
       const msg = String(error.message || '');
       const mentionsGeminiColumn =
@@ -442,15 +448,26 @@ export async function saveAppData(data: Partial<AppData>): Promise<void> {
         msg.includes('column') && msg.includes('provider');
 
       if ((mentionsGeminiColumn || mentionsProviderColumn) && ('gemini_api_key' in upsertData || 'ai_provider' in upsertData)) {
+        if (mentionsGeminiColumn && data.geminiApiKey !== undefined) {
+          throw new Error('Supabase migration pending: gemini_api_key column is missing in app_settings.');
+        }
         logWarn(
           'Settings columns missing - retrying without new fields (run SQL migration)',
           normalizeSupabaseError(error),
           'saveAppData'
         );
-        const { gemini_api_key, ai_provider, ...withoutNewColumns } = upsertData;
+
+        const retryData: Record<string, unknown> = { ...upsertData };
+        if (mentionsProviderColumn) {
+          delete retryData.ai_provider;
+        }
+        if (mentionsGeminiColumn) {
+          delete retryData.gemini_api_key;
+        }
+
         ({ data: result, error } = await supabase
           .from('app_settings')
-          .upsert(withoutNewColumns)
+          .upsert(retryData, { onConflict: 'id' })
           .select());
       }
     }
@@ -481,11 +498,19 @@ export async function saveAppData(data: Partial<AppData>): Promise<void> {
     const { apiKey, geminiApiKey, ...rest } = cachedAppData;
     localStorage.setItem('examforge_app_data', JSON.stringify(rest));
     if (data.apiKey !== undefined) {
-      localStorage.setItem('examforge_openrouter_key', data.apiKey);
+      if (data.apiKey) {
+        localStorage.setItem('examforge_openrouter_key', data.apiKey);
+      } else {
+        localStorage.removeItem('examforge_openrouter_key');
+      }
       logInfo('API key saved to localStorage', null, 'saveAppData');
     }
     if (data.geminiApiKey !== undefined) {
-      localStorage.setItem('examforge_gemini_key', data.geminiApiKey);
+      if (data.geminiApiKey) {
+        localStorage.setItem('examforge_gemini_key', data.geminiApiKey);
+      } else {
+        localStorage.removeItem('examforge_gemini_key');
+      }
       logInfo('Gemini API key saved to localStorage', null, 'saveAppData');
     }
     if (data.aiProvider !== undefined) {
@@ -501,6 +526,7 @@ export async function saveAppData(data: Partial<AppData>): Promise<void> {
     } else {
       logError('App settings error', normalized, 'saveAppData');
     }
+    throw error;
   }
 }
 
@@ -820,6 +846,7 @@ export async function saveTestResultToSection(sectionId: string, result: TestRes
     questionText: q.question,
     topic: q.topic,
     dateUsed: result.date,
+    testId: result.id,
   }));
 
   section.storedQuestions = [...newStoredQuestions, ...section.storedQuestions];
@@ -863,18 +890,33 @@ export async function saveTestResultToSection(sectionId: string, result: TestRes
       logSuccess('Test update to supabase successfully', { testId: result.id }, 'saveTestResultToSection');
     }
 
-    // Insert stored questions into Supabase
+    // Insert stored questions into Supabase (best-effort)
+    // Prefer writing test_id (after migration). If column doesn't exist, retry without it.
     for (const sq of newStoredQuestions) {
-      const { error: questionInsertError } = await supabase
+      const payloadWithTestId = {
+        section_id: sectionId,
+        test_id: result.id,
+        question_hash: sq.questionHash,
+        question_text: sq.questionText,
+        topic: sq.topic,
+        date_used: sq.dateUsed,
+      };
+
+      let { error: questionInsertError } = await supabase
         .from('stored_questions')
-        .insert({
-          section_id: sectionId,
-          question_hash: sq.questionHash,
-          question_text: sq.questionText,
-          topic: sq.topic,
-          date_used: sq.dateUsed,
-        });
-      
+        .insert(payloadWithTestId);
+
+      if (questionInsertError) {
+        const msg = String(questionInsertError.message || '');
+        const missingTestIdColumn = msg.includes('test_id') && (msg.includes('column') || msg.includes('does not exist'));
+        if (missingTestIdColumn) {
+          const { test_id, ...payloadWithoutTestId } = payloadWithTestId as any;
+          ({ error: questionInsertError } = await supabase
+            .from('stored_questions')
+            .insert(payloadWithoutTestId));
+        }
+      }
+
       if (questionInsertError) {
         logError('Questions error', questionInsertError, 'saveTestResultToSection');
       }
@@ -981,11 +1023,24 @@ export async function renameTestResult(sectionId: string, testId: string, newNam
   }
 }
 
-export async function deleteTestResult(sectionId: string, testId: string): Promise<void> {
+export async function deleteTestResult(sectionId: string, testId: string): Promise<{ cloudDeleted: boolean; cloudError?: string }> {
   const section = getSection(sectionId);
-  if (!section) return;
+  if (!section) return { cloudDeleted: false, cloudError: 'Section not found' };
+
+  const testToDelete = section.testResults.find(t => t.id === testId);
+  const hashesToDelete =
+    testToDelete?.questions?.map(q => hashQuestion(q.question)) || [];
 
   section.testResults = section.testResults.filter(t => t.id !== testId);
+  if (hashesToDelete.length > 0) {
+    // Remove only questions that belong to this test (works best when testId is present)
+    section.storedQuestions = section.storedQuestions.filter((sq) => {
+      if ((sq as any).testId) return (sq as any).testId !== testId;
+      // Backward-compat: try to match by (dateUsed + questionHash) for older rows
+      if (testToDelete?.date && sq.dateUsed !== testToDelete.date) return true;
+      return !hashesToDelete.includes(sq.questionHash);
+    });
+  }
   
   // Update cache
   const data = getAppData();
@@ -1002,20 +1057,56 @@ export async function deleteTestResult(sectionId: string, testId: string): Promi
     const { error } = await supabase
       .from('test_results')
       .delete()
-      .eq('id', testId);
+      .eq('id', testId)
+      .eq('section_id', sectionId);
     
     if (error) {
       logError('Test error', error, 'deleteTestResult');
+      return { cloudDeleted: false, cloudError: error.message };
     } else {
       logSuccess('Test update to supabase successfully', { testId }, 'deleteTestResult');
+    }
+
+    // Also delete stored questions for this test (2 strategies):
+    // 1) If schema has test_id column: delete by test_id
+    // 2) Backward-compat: delete by (section_id + date_used + question_hash IN [...])
+    if (hashesToDelete.length > 0 && testToDelete?.date) {
+      // Strategy 1: delete by test_id (may fail if column missing)
+      const { error: sqByTestIdError } = await supabase
+        .from('stored_questions')
+        .delete()
+        .eq('section_id', sectionId)
+        .eq('test_id', testId);
+
+      if (sqByTestIdError) {
+        const msg = String(sqByTestIdError.message || '');
+        const missingTestIdColumn = msg.includes('test_id') && (msg.includes('column') || msg.includes('does not exist'));
+        if (!missingTestIdColumn) {
+          logError('Questions error', sqByTestIdError, 'deleteTestResult');
+        }
+
+        // Strategy 2: safe fallback for old schema/data
+        const { error: sqFallbackError } = await supabase
+          .from('stored_questions')
+          .delete()
+          .eq('section_id', sectionId)
+          .eq('date_used', testToDelete.date)
+          .in('question_hash', hashesToDelete);
+
+        if (sqFallbackError) {
+          logError('Questions error', sqFallbackError, 'deleteTestResult');
+        }
+      }
     }
 
     // Save to localStorage
     const { apiKey, ...rest } = data;
     localStorage.setItem('examforge_app_data', JSON.stringify(rest));
+    return { cloudDeleted: true };
   } catch (error) {
     console.error('Error deleting test result from Supabase:', error);
     logError('Test error', error, 'deleteTestResult');
+    return { cloudDeleted: false, cloudError: error instanceof Error ? error.message : String(error) };
   }
 }
 

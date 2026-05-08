@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS saved_documents (
 CREATE TABLE IF NOT EXISTS stored_questions (
   id SERIAL PRIMARY KEY,
   section_id TEXT REFERENCES sections(id) ON DELETE CASCADE,
+  test_id TEXT REFERENCES test_results(id) ON DELETE CASCADE,
   question_hash TEXT NOT NULL,
   question_text TEXT NOT NULL,
   topic TEXT,
@@ -61,15 +62,57 @@ CREATE TABLE IF NOT EXISTS test_results (
   time_taken INTEGER
 );
 
+-- Migration helper (safe to run multiple times):
+-- If stored_questions already exists, ensure test_id column + FK exist.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'stored_questions'
+  ) THEN
+    IF NOT EXISTS (
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'stored_questions' AND column_name = 'test_id'
+    ) THEN
+      ALTER TABLE public.stored_questions ADD COLUMN test_id TEXT;
+    END IF;
+
+    -- Add FK if missing (ignore if already exists)
+    BEGIN
+      ALTER TABLE public.stored_questions
+        ADD CONSTRAINT stored_questions_test_id_fkey
+        FOREIGN KEY (test_id) REFERENCES public.test_results(id) ON DELETE CASCADE;
+    EXCEPTION WHEN duplicate_object THEN
+      -- constraint already exists
+      NULL;
+    END;
+  END IF;
+END $$;
+
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_saved_documents_section_id ON saved_documents(section_id);
 CREATE INDEX IF NOT EXISTS idx_stored_questions_section_id ON stored_questions(section_id);
+CREATE INDEX IF NOT EXISTS idx_stored_questions_test_id ON stored_questions(test_id);
 CREATE INDEX IF NOT EXISTS idx_stored_questions_hash ON stored_questions(question_hash);
 CREATE INDEX IF NOT EXISTS idx_test_results_section_id ON test_results(section_id);
 CREATE INDEX IF NOT EXISTS idx_test_results_date ON test_results(date);
 
 -- Enable Row Level Security (RLS) - optional, for authenticated users only
 -- For now, we allow public access for the demo
+
+-- Ensure public (anon/authenticated) can read/write for demo apps.
+-- If you later enable auth/RLS, replace this with proper policies.
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON app_settings TO anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON sections TO anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON saved_documents TO anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON stored_questions TO anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON test_results TO anon, authenticated;
+
+-- Needed for SERIAL columns (stored_questions.id) when inserting
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;
 
 -- Add comments for documentation
 COMMENT ON TABLE app_settings IS 'Stores app-wide settings like API key and active section';

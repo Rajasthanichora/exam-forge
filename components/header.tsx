@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { toast } from 'sonner';
 
 interface HeaderProps {
   apiKey: string;
@@ -21,17 +22,52 @@ interface HeaderProps {
   onGeminiApiKeyChange: (key: string) => Promise<void> | void;
   aiProvider: 'openrouter' | 'gemini';
   onAiProviderChange: (provider: 'openrouter' | 'gemini') => Promise<void> | void;
+  openRouterModel: string;
+  geminiModel: string;
+  onOpenRouterModelChange: (model: string) => Promise<void> | void;
+  onGeminiModelChange: (model: string) => Promise<void> | void;
   onShowHistory: () => void;
   sectionName?: string;
   onOpenSidebar?: () => void;
 }
 
-export function Header({ apiKey, onApiKeyChange, geminiApiKey, onGeminiApiKeyChange, aiProvider, onAiProviderChange, onShowHistory, sectionName, onOpenSidebar }: HeaderProps) {
+type ModelOption = { value: string; label: string };
+
+const DEFAULT_OPENROUTER_FREE_MODELS: ModelOption[] = [
+  { value: 'meta-llama/llama-3.3-70b-instruct:free', label: 'Llama 3.3 70B Instruct (Free)' },
+  { value: 'google/gemma-3-27b-it:free', label: 'Gemma 3 27B IT (Free)' },
+  { value: 'qwen/qwen3-32b:free', label: 'Qwen 3 32B (Free)' },
+  { value: 'mistralai/mistral-small-3.1-24b-instruct:free', label: 'Mistral Small 3.1 24B (Free)' },
+];
+
+const DEFAULT_GEMINI_MODELS: ModelOption[] = [
+  { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
+  { value: 'gemini-2.0-flash-lite', label: 'Gemini 2.0 Flash Lite' },
+  { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash' },
+];
+
+export function Header({
+  apiKey,
+  onApiKeyChange,
+  geminiApiKey,
+  onGeminiApiKeyChange,
+  aiProvider,
+  onAiProviderChange,
+  openRouterModel,
+  geminiModel,
+  onOpenRouterModelChange,
+  onGeminiModelChange,
+  onShowHistory,
+  sectionName,
+  onOpenSidebar,
+}: HeaderProps) {
   const [isSaved, setIsSaved] = useState(false);
   const [isGeminiSaved, setIsGeminiSaved] = useState(false);
   const [localKey, setLocalKey] = useState(apiKey);
   const [localGeminiKey, setLocalGeminiKey] = useState(geminiApiKey);
   const [isSaving, setIsSaving] = useState(false);
+  const [openRouterModels, setOpenRouterModels] = useState<ModelOption[]>(DEFAULT_OPENROUTER_FREE_MODELS);
+  const [geminiModels, setGeminiModels] = useState<ModelOption[]>(DEFAULT_GEMINI_MODELS);
   
   // Sync local key with prop
   useEffect(() => {
@@ -43,6 +79,74 @@ export function Header({ apiKey, onApiKeyChange, geminiApiKey, onGeminiApiKeyCha
     setLocalGeminiKey(geminiApiKey);
     setIsGeminiSaved(!!geminiApiKey);
   }, [geminiApiKey]);
+
+  useEffect(() => {
+    const fetchOpenRouterModels = async () => {
+      if (!localKey) {
+        setOpenRouterModels(DEFAULT_OPENROUTER_FREE_MODELS);
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/free-models', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ provider: 'openrouter', apiKey: localKey }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload?.error || 'Failed to fetch OpenRouter models');
+        }
+
+        const models = Array.isArray(payload?.models) && payload.models.length > 0
+          ? payload.models
+          : DEFAULT_OPENROUTER_FREE_MODELS;
+
+        setOpenRouterModels(models);
+        if (!models.some((model: ModelOption) => model.value === openRouterModel)) {
+          onOpenRouterModelChange(models[0].value);
+        }
+      } catch (error) {
+        setOpenRouterModels(DEFAULT_OPENROUTER_FREE_MODELS);
+      }
+    };
+
+    fetchOpenRouterModels();
+  }, [localKey, openRouterModel]);
+
+  useEffect(() => {
+    const fetchGeminiModels = async () => {
+      if (!localGeminiKey) {
+        setGeminiModels(DEFAULT_GEMINI_MODELS);
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/free-models', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ provider: 'gemini', apiKey: localGeminiKey }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload?.error || 'Failed to fetch Gemini models');
+        }
+
+        const models = Array.isArray(payload?.models) && payload.models.length > 0
+          ? payload.models
+          : DEFAULT_GEMINI_MODELS;
+
+        setGeminiModels(models);
+        if (!models.some((model: ModelOption) => model.value === geminiModel)) {
+          onGeminiModelChange(models[0].value);
+        }
+      } catch {
+        setGeminiModels(DEFAULT_GEMINI_MODELS);
+      }
+    };
+
+    fetchGeminiModels();
+  }, [localGeminiKey, geminiModel]);
   
   const handleSaveKey = async () => {
     if (!localKey) return;
@@ -50,6 +154,9 @@ export function Header({ apiKey, onApiKeyChange, geminiApiKey, onGeminiApiKeyCha
       setIsSaving(true);
       await onApiKeyChange(localKey);
       setIsSaved(true);
+      toast.success('OpenRouter key synced to cloud');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'OpenRouter key sync failed');
     } finally {
       setIsSaving(false);
     }
@@ -61,6 +168,9 @@ export function Header({ apiKey, onApiKeyChange, geminiApiKey, onGeminiApiKeyCha
       setLocalKey('');
       await onApiKeyChange('');
       setIsSaved(false);
+      toast.success('OpenRouter key removed from cloud');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'OpenRouter key delete failed');
     } finally {
       setIsSaving(false);
     }
@@ -72,6 +182,9 @@ export function Header({ apiKey, onApiKeyChange, geminiApiKey, onGeminiApiKeyCha
       setIsSaving(true);
       await onGeminiApiKeyChange(localGeminiKey);
       setIsGeminiSaved(true);
+      toast.success('Gemini key synced to cloud');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Gemini key sync failed');
     } finally {
       setIsSaving(false);
     }
@@ -83,6 +196,9 @@ export function Header({ apiKey, onApiKeyChange, geminiApiKey, onGeminiApiKeyCha
       setLocalGeminiKey('');
       await onGeminiApiKeyChange('');
       setIsGeminiSaved(false);
+      toast.success('Gemini key removed from cloud');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Gemini key delete failed');
     } finally {
       setIsSaving(false);
     }
@@ -246,6 +362,25 @@ export function Header({ apiKey, onApiKeyChange, geminiApiKey, onGeminiApiKeyCha
                     </div>
                   </div>
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="openrouterModel" className="text-foreground">OpenRouter Free Model</Label>
+                  <select
+                    id="openrouterModel"
+                    value={openRouterModel}
+                    onChange={(e) => onOpenRouterModelChange(e.target.value)}
+                    disabled={isSaving || !localKey}
+                    className="w-full h-10 rounded-md border border-border bg-input px-3 text-sm text-foreground disabled:opacity-50"
+                  >
+                    {openRouterModels.map((model) => (
+                      <option key={model.value} value={model.value}>
+                        {model.label}
+                      </option>
+                    ))}
+                  </select>
+                  {!localKey && (
+                    <p className="text-xs text-muted-foreground">OpenRouter key save karne ke baad model use hoga.</p>
+                  )}
+                </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="geminiApiKey" className="text-foreground">Google Gemini API Key</Label>
@@ -293,6 +428,25 @@ export function Header({ apiKey, onApiKeyChange, geminiApiKey, onGeminiApiKeyCha
                       </Button>
                     </div>
                   </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="geminiModel" className="text-foreground">Gemini Free Model</Label>
+                  <select
+                    id="geminiModel"
+                    value={geminiModel}
+                    onChange={(e) => onGeminiModelChange(e.target.value)}
+                    disabled={isSaving || !localGeminiKey}
+                    className="w-full h-10 rounded-md border border-border bg-input px-3 text-sm text-foreground disabled:opacity-50"
+                  >
+                    {geminiModels.map((model) => (
+                      <option key={model.value} value={model.value}>
+                        {model.label}
+                      </option>
+                    ))}
+                  </select>
+                  {!localGeminiKey && (
+                    <p className="text-xs text-muted-foreground">Gemini key save karne ke baad model use hoga.</p>
+                  )}
                 </div>
                 <p className="text-sm text-muted-foreground">
                   Get your API key from{' '}

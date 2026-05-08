@@ -41,12 +41,18 @@ type AppView = 'config' | 'quiz' | 'results' | 'history' | 'similarity';
 const API_KEY_STORAGE = 'examforge_openrouter_key';
 const GEMINI_KEY_STORAGE = 'examforge_gemini_key';
 const AI_PROVIDER_STORAGE = 'examforge_ai_provider';
+const OPENROUTER_MODEL_STORAGE = 'examforge_openrouter_model';
+const GEMINI_MODEL_STORAGE = 'examforge_gemini_model';
+const DEFAULT_OPENROUTER_MODEL = 'meta-llama/llama-3.3-70b-instruct:free';
+const DEFAULT_GEMINI_MODEL = 'gemini-2.0-flash';
 
 export default function Home() {
   const [view, setView] = useState<AppView>('config');
   const [apiKey, setApiKey] = useState('');
   const [geminiApiKey, setGeminiApiKey] = useState('');
   const [aiProvider, setAiProvider] = useState<'openrouter' | 'gemini'>('openrouter');
+  const [openRouterModel, setOpenRouterModel] = useState(DEFAULT_OPENROUTER_MODEL);
+  const [geminiModel, setGeminiModel] = useState(DEFAULT_GEMINI_MODEL);
   const [isLoading, setIsLoading] = useState(false);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [answers, setAnswers] = useState<Record<string, number>>({});
@@ -143,6 +149,16 @@ export default function Home() {
           const storedProvider = localStorage.getItem(AI_PROVIDER_STORAGE) as any;
           if (storedProvider === 'gemini' || storedProvider === 'openrouter') setAiProvider(storedProvider);
         }
+
+        const storedOpenRouterModel = localStorage.getItem(OPENROUTER_MODEL_STORAGE);
+        if (storedOpenRouterModel) {
+          setOpenRouterModel(storedOpenRouterModel);
+        }
+
+        const storedGeminiModel = localStorage.getItem(GEMINI_MODEL_STORAGE);
+        if (storedGeminiModel) {
+          setGeminiModel(storedGeminiModel);
+        }
       } catch (error) {
         console.error('Error loading data from Supabase:', error);
         setSupabaseStatus('disconnected');
@@ -194,29 +210,61 @@ export default function Home() {
 
   // Save API key to storage when changed
   const handleApiKeyChange = async (key: string) => {
+    const previousKey = apiKey;
     setApiKey(key);
     if (key) {
       localStorage.setItem(API_KEY_STORAGE, key);
     } else {
       localStorage.removeItem(API_KEY_STORAGE);
     }
-    await saveAppData({ apiKey: key });
+    try {
+      await saveAppData({ apiKey: key });
+    } catch (error) {
+      setApiKey(previousKey);
+      if (previousKey) {
+        localStorage.setItem(API_KEY_STORAGE, previousKey);
+      } else {
+        localStorage.removeItem(API_KEY_STORAGE);
+      }
+      throw error;
+    }
   };
 
   const handleGeminiApiKeyChange = async (key: string) => {
+    const previousKey = geminiApiKey;
     setGeminiApiKey(key);
     if (key) {
       localStorage.setItem(GEMINI_KEY_STORAGE, key);
     } else {
       localStorage.removeItem(GEMINI_KEY_STORAGE);
     }
-    await saveAppData({ geminiApiKey: key } as any);
+    try {
+      await saveAppData({ geminiApiKey: key } as any);
+    } catch (error) {
+      setGeminiApiKey(previousKey);
+      if (previousKey) {
+        localStorage.setItem(GEMINI_KEY_STORAGE, previousKey);
+      } else {
+        localStorage.removeItem(GEMINI_KEY_STORAGE);
+      }
+      throw error;
+    }
   };
 
   const handleAiProviderChange = async (provider: 'openrouter' | 'gemini') => {
     setAiProvider(provider);
     localStorage.setItem(AI_PROVIDER_STORAGE, provider);
     await saveAppData({ aiProvider: provider } as any);
+  };
+
+  const handleOpenRouterModelChange = (model: string) => {
+    setOpenRouterModel(model);
+    localStorage.setItem(OPENROUTER_MODEL_STORAGE, model);
+  };
+
+  const handleGeminiModelChange = (model: string) => {
+    setGeminiModel(model);
+    localStorage.setItem(GEMINI_MODEL_STORAGE, model);
   };
 
   // Section management handlers
@@ -303,6 +351,7 @@ export default function Home() {
     // Enhance config with section context
     const enhancedConfig: TestConfig = {
       ...config,
+      aiModel: aiProvider === 'gemini' ? geminiModel : openRouterModel,
       sectionId: activeSectionId,
       sectionName: activeSection.name,
     };
@@ -319,6 +368,7 @@ export default function Home() {
         body: JSON.stringify({
           config: enhancedConfig,
           provider: aiProvider,
+          model: enhancedConfig.aiModel,
           apiKey,
           geminiApiKey,
           storedQuestions,
@@ -328,13 +378,68 @@ export default function Home() {
       const data = await response.json();
 
       if (!response.ok) {
+        const normalizedErrorMessage =
+          typeof data?.error === 'string'
+            ? data.error
+            : data?.error?.message || data?.message || 'Failed to generate test';
+        const errorDetails = {
+          provider: aiProvider,
+          model: enhancedConfig.aiModel,
+          status: response.status,
+          statusText: response.statusText,
+          error: data?.error ?? null,
+          rawResponse: data ?? null,
+        };
+
         // Debug logs for currently selected provider/key
         if (aiProvider === 'gemini') {
-          logError('Gemini api key error', { error: data.error }, 'generate-test');
+          logError('Gemini api key error', errorDetails, 'generate-test');
         } else {
-          logError('Api key error', { error: data.error }, 'generate-test');
+          logError('Api key error', errorDetails, 'generate-test');
         }
-        throw new Error(data.error || 'Failed to generate test');
+
+        const errorText = String(normalizedErrorMessage || '').toLowerCase();
+        const geminiQuotaExceeded =
+          aiProvider === 'gemini' &&
+          (errorText.includes('quota') || errorText.includes('rate limit') || errorText.includes('free quota'));
+
+        if (geminiQuotaExceeded && apiKey) {
+          toast.warning('Gemini free quota exhausted, switching to OpenRouter automatically.');
+
+          const fallbackResponse = await fetch('/api/generate-test', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              config: { ...enhancedConfig, aiModel: openRouterModel },
+              provider: 'openrouter',
+              model: openRouterModel,
+              apiKey,
+              geminiApiKey,
+              storedQuestions,
+            }),
+          });
+
+          const fallbackData = await fallbackResponse.json();
+          if (fallbackResponse.ok) {
+            setAiProvider('openrouter');
+            localStorage.setItem(AI_PROVIDER_STORAGE, 'openrouter');
+
+            const questionTexts = fallbackData.questions.map((q: Question) => q.question);
+            const report = generateSimilarityReportForSection(activeSectionId, questionTexts);
+            setSimilarityReport(report);
+
+            setQuestions(fallbackData.questions);
+            setAnswers({});
+            setAiUniqueMessage(fallbackData.message || null);
+            setView(storedQuestions.length > 0 ? 'similarity' : 'quiz');
+            toast.success(`Generated ${fallbackData.questions.length} questions via OpenRouter.`);
+            return;
+          }
+        }
+
+        throw new Error(normalizedErrorMessage);
       }
 
       // Provider health log (requested)
@@ -472,9 +577,13 @@ export default function Home() {
 
   const handleDeleteTest = async (testId: string) => {
     if (!activeSectionId) return;
-    await deleteTestResult(activeSectionId, testId);
+    const { cloudDeleted, cloudError } = await deleteTestResult(activeSectionId, testId);
     setSections(getAllSections());
-    toast.success('Test deleted');
+    if (cloudDeleted) {
+      toast.success('Test deleted (cloud synced)');
+    } else {
+      toast.warning(`Test deleted locally, but cloud delete failed${cloudError ? `: ${cloudError}` : ''}`);
+    }
   };
 
   const handleRetakeTest = (test: TestResult) => {
@@ -552,6 +661,10 @@ export default function Home() {
           onGeminiApiKeyChange={handleGeminiApiKeyChange}
           aiProvider={aiProvider}
           onAiProviderChange={handleAiProviderChange}
+          openRouterModel={openRouterModel}
+          geminiModel={geminiModel}
+          onOpenRouterModelChange={handleOpenRouterModelChange}
+          onGeminiModelChange={handleGeminiModelChange}
           onShowHistory={handleShowHistory}
           sectionName={activeSection?.name}
           onOpenSidebar={() => setMobileSidebarOpen(true)}
@@ -594,7 +707,8 @@ export default function Home() {
               <TestConfigForm
                 onStartTest={handleStartTest}
                 isLoading={isLoading}
-                hasApiKey={!!apiKey}
+                hasApiKey={aiProvider === 'gemini' ? !!geminiApiKey : !!apiKey}
+                apiKeyLabel={aiProvider === 'gemini' ? 'Gemini' : 'OpenRouter'}
                 savedDocuments={savedDocuments}
                 selectedDocIds={selectedDocIds}
                 onSaveDocument={handleSaveDocument}

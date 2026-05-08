@@ -18,6 +18,7 @@ interface TestConfigFormProps {
   onStartTest: (config: TestConfig) => void;
   isLoading: boolean;
   hasApiKey: boolean;
+  apiKeyLabel?: string;
   savedDocuments?: SavedDocument[];
   selectedDocIds?: string[];
   onSaveDocument?: (doc: { name: string; content: string; size: number }) => void;
@@ -44,6 +45,7 @@ export function TestConfigForm({
   onStartTest,
   isLoading,
   hasApiKey,
+  apiKeyLabel = 'API',
   savedDocuments = [],
   selectedDocIds = [],
   onSaveDocument,
@@ -375,7 +377,7 @@ export function TestConfigForm({
 
       {!hasApiKey && (
         <p className="text-center text-sm text-destructive">
-          Please configure your OpenRouter API key in settings to generate tests.
+          Please configure your {apiKeyLabel} API key in settings to generate tests.
         </p>
       )}
 
