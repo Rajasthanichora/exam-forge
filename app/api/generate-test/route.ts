@@ -148,15 +148,23 @@ export async function POST(request: NextRequest) {
     // Validate and format questions
     const validatedQuestions = questions
       .slice(0, config.questionCount)
-      .map((q: Record<string, unknown>, index: number) => ({
-        id: `q-${Date.now()}-${index}`,
-        question: String(q.question || ''),
-        options: Array.isArray(q.options) ? q.options.map(String) : [],
-        correctAnswer: typeof q.correctAnswer === 'number' ? q.correctAnswer : 0,
-        explanation: String(q.explanation || ''),
-        difficulty: config.difficulty,
-        topic: String(q.topic || 'General'),
-      }))
+      .map((q: Record<string, unknown>, index: number) => {
+        let questionText = String(q.question || '');
+        // Enforce one-liner: truncate to first sentence only, max 120 chars
+        if (config.oneLinerMode && questionText.length > 120) {
+          const firstSentence = questionText.split(/[.!?]/)[0];
+          questionText = firstSentence.length > 10 ? firstSentence.trim() + '?' : questionText.slice(0, 100).trim() + '...';
+        }
+        return {
+          id: `q-${Date.now()}-${index}`,
+          question: questionText,
+          options: Array.isArray(q.options) ? q.options.map(String) : [],
+          correctAnswer: typeof q.correctAnswer === 'number' ? q.correctAnswer : 0,
+          explanation: String(q.explanation || ''),
+          difficulty: config.difficulty,
+          topic: String(q.topic || 'General'),
+        };
+      })
       .filter((q: Question) => q.question && q.options.length === 4)
       .map(shuffleQuestionOptions);
 
@@ -233,7 +241,15 @@ function buildPrompt(config: TestConfig, storedQuestions: StoredQuestion[]): str
 DIFFICULTY LEVEL: ${config.difficulty.toUpperCase()}
 ${difficultyInstructions[config.difficulty]}
 
-QUESTION FORMAT: ${config.oneLinierMode ? 'CONCISE ONE-LINER FORMAT - Each question must be a short, direct, single-line question (no multi-part questions). Keep questions brief and to the point.' : 'STANDARD DETAILED FORMAT'}
+QUESTION FORMAT: ${config.oneLinerMode ? `ONE-LINER FORMAT - CRITICAL: Each question MUST be a SHORT, SINGLE-LINE question (max 15 words, one sentence only). STRICTLY NO multi-part questions, NO long descriptions, NO paragraphs. Keep each question VERY brief and direct. 
+
+Examples of ONE-LINER questions:
+- "What is the capital of France?"
+- "Define photosynthesis in plants."
+- "What does CPU stand for?"
+- "Which gas do plants absorb from the atmosphere?"
+
+CRITICAL: If any question exceeds 15 words or contains multiple sentences, it is WRONG.` : 'STANDARD DETAILED FORMAT'}
 
 `;
 

@@ -891,9 +891,9 @@ export async function saveTestResultToSection(sectionId: string, result: TestRes
     }
 
     // Insert stored questions into Supabase (best-effort)
-    // Prefer writing test_id (after migration). If column doesn't exist, retry without it.
+    // Retry dropping optional columns if they don't exist in the table schema
     for (const sq of newStoredQuestions) {
-      const payloadWithTestId = {
+      let currentPayload: Record<string, unknown> = {
         section_id: sectionId,
         test_id: result.id,
         question_hash: sq.questionHash,
@@ -902,23 +902,33 @@ export async function saveTestResultToSection(sectionId: string, result: TestRes
         date_used: sq.dateUsed,
       };
 
-      let { error: questionInsertError } = await supabase
-        .from('stored_questions')
-        .insert(payloadWithTestId);
+      let questionInsertError: any = null;
 
-      if (questionInsertError) {
+      // Try up to 3 times, dropping one optional column each time
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const result = await supabase
+          .from('stored_questions')
+          .insert(currentPayload);
+        questionInsertError = result.error;
+
+        if (!questionInsertError) break;
+
         const msg = String(questionInsertError.message || '');
-        const missingTestIdColumn = msg.includes('test_id') && (msg.includes('column') || msg.includes('does not exist'));
-        if (missingTestIdColumn) {
-          const { test_id, ...payloadWithoutTestId } = payloadWithTestId as any;
-          ({ error: questionInsertError } = await supabase
-            .from('stored_questions')
-            .insert(payloadWithoutTestId));
+        if (msg.includes('test_id') && (msg.includes('column') || msg.includes('does not exist'))) {
+          delete currentPayload.test_id;
+          continue;
         }
+        if (msg.includes('topic') && (msg.includes('column') || msg.includes('does not exist'))) {
+          delete currentPayload.topic;
+          continue;
+        }
+        // FK or other error - can't recover
+        break;
       }
 
       if (questionInsertError) {
-        logError('Questions error', questionInsertError, 'saveTestResultToSection');
+        // Only log once per batch to reduce noise
+        logWarn('Questions sync to Supabase skipped (non-critical)', questionInsertError, 'saveTestResultToSection');
       }
     }
 

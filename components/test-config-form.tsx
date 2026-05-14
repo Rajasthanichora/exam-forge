@@ -9,6 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Slider } from '@/components/ui/slider';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Switch } from '@/components/ui/switch';
 import { TestConfig, Difficulty, Language, UploadedFile, SavedDocument } from '@/lib/types';
 import { FileUpload } from './file-upload';
 import { SavedDocuments } from './saved-documents';
@@ -61,7 +62,7 @@ export function TestConfigForm({
   const [questionCount, setQuestionCount] = useState(20);
   const [language, setLanguage] = useState<Language>('english');
   const [customPrompt, setCustomPrompt] = useState('');
-  const [oneLinierMode, setOneLinierMode] = useState(false);
+  const [oneLinerMode, setOneLinerMode] = useState(false);
   const [inputMethod, setInputMethod] = useState<'paste' | 'upload' | 'saved'>('paste');
 
   // Sync notes with parent
@@ -105,7 +106,7 @@ export function TestConfigForm({
       questionCount,
       language,
       customPrompt,
-      oneLinierMode,
+      oneLinerMode,
     });
   };
 
@@ -356,45 +357,34 @@ export function TestConfigForm({
              />
            </div>
 
-           {/* One-Liner Mode Toggle */}
-           <div className="space-y-3">
-             <Label className="text-foreground flex items-center justify-between">
-               <span className="flex items-center gap-2">
-                 <Zap className="w-4 h-4 text-primary" />
-                 One-Liner Mode (Optional)
-               </span>
-             </Label>
-             <div className="flex items-center justify-between p-4 rounded-lg border-2 bg-secondary/30 transition-all"
-               style={{
-                 borderColor: oneLinierMode ? 'var(--primary)' : 'var(--border)',
-                 backgroundColor: oneLinierMode ? 'var(--primary)/10' : 'var(--secondary)/30'
-               }}>
-               <div>
-                 <p className="font-medium text-foreground text-sm">
-                   {oneLinierMode ? 'ON' : 'OFF'}
-                 </p>
-                 <p className="text-xs text-muted-foreground mt-1">
-                   {oneLinierMode 
-                     ? 'Questions will be concise, one-liner format' 
-                     : 'Normal, detailed question format'}
-                 </p>
-               </div>
-               <button
-                 onClick={() => setOneLinierMode(!oneLinierMode)}
-                 className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${
-                   oneLinierMode 
-                     ? 'bg-primary' 
-                     : 'bg-secondary border border-border'
-                 }`}
-               >
-                 <span
-                   className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-transform ${
-                     oneLinierMode ? 'translate-x-7' : 'translate-x-1'
-                   }`}
-                 />
-               </button>
-             </div>
-           </div>
+            {/* One-Liner Mode Toggle */}
+            <div className="space-y-3">
+              <Label className="text-foreground">One-Liner Mode (Optional)</Label>
+              <div className={`flex items-center justify-between p-4 rounded-lg border-2 transition-all ${
+                oneLinerMode 
+                  ? 'border-primary bg-primary/10' 
+                  : 'border-border bg-secondary/30'
+              }`}>
+                <div className="flex items-center gap-3">
+                  <Zap className={`w-5 h-5 ${oneLinerMode ? 'text-primary' : 'text-muted-foreground'}`} />
+                  <div>
+                    <p className={`font-medium text-sm ${oneLinerMode ? 'text-primary' : 'text-foreground'}`}>
+                      {oneLinerMode ? 'ON - One-Liner Mode' : 'OFF - Standard Mode'}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {oneLinerMode 
+                        ? 'Questions will be short, direct, and concise' 
+                        : 'Normal, detailed question format'}
+                    </p>
+                  </div>
+                </div>
+                <Switch
+                  checked={oneLinerMode}
+                  onCheckedChange={setOneLinerMode}
+                  className="shrink-0"
+                />
+              </div>
+            </div>
          </CardContent>
        </Card>
 

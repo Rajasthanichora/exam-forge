@@ -17,7 +17,7 @@ export interface TestConfig {
   questionCount: number;
   language: Language;
   customPrompt: string;
-  oneLinierMode?: boolean;
+  oneLinerMode?: boolean;
   aiModel?: string;
   sectionId?: string;
   sectionName?: string;
