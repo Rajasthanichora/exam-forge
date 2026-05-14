@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Sparkles, FileText, Languages, Settings2, FolderOpen } from 'lucide-react';
+import { Sparkles, FileText, Languages, Settings2, FolderOpen, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -61,6 +61,7 @@ export function TestConfigForm({
   const [questionCount, setQuestionCount] = useState(20);
   const [language, setLanguage] = useState<Language>('english');
   const [customPrompt, setCustomPrompt] = useState('');
+  const [oneLinierMode, setOneLinierMode] = useState(false);
   const [inputMethod, setInputMethod] = useState<'paste' | 'upload' | 'saved'>('paste');
 
   // Sync notes with parent
@@ -104,6 +105,7 @@ export function TestConfigForm({
       questionCount,
       language,
       customPrompt,
+      oneLinierMode,
     });
   };
 
@@ -343,18 +345,58 @@ export function TestConfigForm({
             </div>
           </div>
 
-          {/* Custom Prompt */}
-          <div className="space-y-3">
-            <Label className="text-foreground">Custom Instructions (Optional)</Label>
-            <Textarea
-              placeholder="Add specific instructions for the AI... e.g., 'Focus on definitions' or 'Include practical application questions' or 'Create scenario-based questions'"
-              value={customPrompt}
-              onChange={(e) => setCustomPrompt(e.target.value)}
-              className="min-h-[100px] bg-input border-border text-foreground placeholder:text-muted-foreground"
-            />
-          </div>
-        </CardContent>
-      </Card>
+           {/* Custom Prompt */}
+           <div className="space-y-3">
+             <Label className="text-foreground">Custom Instructions (Optional)</Label>
+             <Textarea
+               placeholder="Add specific instructions for the AI... e.g., 'Focus on definitions' or 'Include practical application questions' or 'Create scenario-based questions'"
+               value={customPrompt}
+               onChange={(e) => setCustomPrompt(e.target.value)}
+               className="min-h-[100px] bg-input border-border text-foreground placeholder:text-muted-foreground"
+             />
+           </div>
+
+           {/* One-Liner Mode Toggle */}
+           <div className="space-y-3">
+             <Label className="text-foreground flex items-center justify-between">
+               <span className="flex items-center gap-2">
+                 <Zap className="w-4 h-4 text-primary" />
+                 One-Liner Mode (Optional)
+               </span>
+             </Label>
+             <div className="flex items-center justify-between p-4 rounded-lg border-2 bg-secondary/30 transition-all"
+               style={{
+                 borderColor: oneLinierMode ? 'var(--primary)' : 'var(--border)',
+                 backgroundColor: oneLinierMode ? 'var(--primary)/10' : 'var(--secondary)/30'
+               }}>
+               <div>
+                 <p className="font-medium text-foreground text-sm">
+                   {oneLinierMode ? 'ON' : 'OFF'}
+                 </p>
+                 <p className="text-xs text-muted-foreground mt-1">
+                   {oneLinierMode 
+                     ? 'Questions will be concise, one-liner format' 
+                     : 'Normal, detailed question format'}
+                 </p>
+               </div>
+               <button
+                 onClick={() => setOneLinierMode(!oneLinierMode)}
+                 className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${
+                   oneLinierMode 
+                     ? 'bg-primary' 
+                     : 'bg-secondary border border-border'
+                 }`}
+               >
+                 <span
+                   className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-transform ${
+                     oneLinierMode ? 'translate-x-7' : 'translate-x-1'
+                   }`}
+                 />
+               </button>
+             </div>
+           </div>
+         </CardContent>
+       </Card>
 
       {/* Generate Button */}
       <Button

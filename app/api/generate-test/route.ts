@@ -233,6 +233,8 @@ function buildPrompt(config: TestConfig, storedQuestions: StoredQuestion[]): str
 DIFFICULTY LEVEL: ${config.difficulty.toUpperCase()}
 ${difficultyInstructions[config.difficulty]}
 
+QUESTION FORMAT: ${config.oneLinierMode ? 'CONCISE ONE-LINER FORMAT - Each question must be a short, direct, single-line question (no multi-part questions). Keep questions brief and to the point.' : 'STANDARD DETAILED FORMAT'}
+
 `;
 
   if (config.customPrompt) {
